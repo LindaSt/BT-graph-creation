@@ -1,2 +1,4 @@
 # BT-graph-creation
-Scripts to parse ASAP overlays to xmls and graphs
+This repo contains scripts to parse [ASAP](https://www.ecosia.org/search?q=asap+computational+pathology) overlays to xmls, numpy files with the coordinates and gxl files (graphs).
+
+

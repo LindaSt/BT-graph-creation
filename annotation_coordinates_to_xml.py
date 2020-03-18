@@ -60,7 +60,7 @@ def create_asap_xml(files_to_process, output_folder):
 
             else:
                 print('File {} does not exist. Continuing...'.format(file_path))
-        e = ET.dump(xml_tree)
+        # e = ET.dump(xml_tree)
         e = ET.ElementTree(xml_tree).write(output_file, pretty_print=True)
 
 

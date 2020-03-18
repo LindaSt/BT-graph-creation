@@ -4,8 +4,8 @@ import numpy as np
 from lxml import etree as ET
 import argparse
 import re
-from working_files.annotation_coordinates_to_xml import create_asap_xml
-from working_files.xml_to_numpy import process_xml_files
+from .annotation_coordinates_to_xml import create_asap_xml
+from .xml_to_txt_file import process_xml_files
 
 
 def setup_output_folders(output_path):
@@ -117,7 +117,7 @@ def create_hotspot_only_txt_files(coor_txt_files_path, txt_output, all_hotspots)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hotspot-path", type=str, required=True)
+    parser.add_argument("--xml-hotspots", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
     args = parser.parse_args()

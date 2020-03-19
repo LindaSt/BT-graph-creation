@@ -7,6 +7,7 @@ from lxml import etree as ET
 import argparse
 import re
 import json
+# TODO: test and make more generic (radius_X, to_all, to_knn)
 from util.edge_insertion_functions import to_closest_tb, connect_tumorbuds, radius_x
 
 #%%

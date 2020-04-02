@@ -56,7 +56,7 @@ Finally, the graph-representations are saved in gxl format.
 1. In development: creating the gxl files (graphs)
 
 ### Convert endpoints to dataset split (cxl files)
-1. `make-endpoint-json.py`: sets up json dictionary based on excel file
+1. `make-endpoint-json.py`: sets up json dictionary based on an excel file
    - **Input**:
      - `--output-path`: where the json files should be saved to
      - `--excel-path`: path to the excel with the data
@@ -65,7 +65,7 @@ Finally, the graph-representations are saved in gxl format.
      - `--json-path`: (optional) json file that should be extended
     
      The excel file is expected to have the following columns:
-     - filename: name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
+     - filename: name of the slide file (e.g. patient1.mrxs)
      - folder: folder where the slide is saved
      - Patient-ID: first part of the filename (e.g patient1)
      - A column(s) named after the `--endpoints` argument, e.g. N group:<br />
@@ -76,14 +76,16 @@ Finally, the graph-representations are saved in gxl format.
            
    - **Input**:
      - json file with structure: <br />
-       >patient-id:<br />
-       >>filename:<br />
+       >patient-id: patient id<br />
+       >>filename:  file name<br />
          folder: folder name<br />
          endpoint1: endpoint value<br />
          endpoint2: endpoint value<br />
          ...
 
-1. `endpoints-json-to-cxl.py`: sets up json dictionary based on excel file
+1. `endpoints-json-to-cxl.py`: splits the data from the json file into train, vaild and test cxl files. 
+    It is split based on the patient-id, so if your slides are very unequally distributed amongh the patients,
+    you will have make sure you still have roughly the percentage split you want.
    - **Input**:
      - `--output-path`: where the cxl files should be saved to
      - `--json-path`: path to the json file with the endpoint(s) data
@@ -93,8 +95,8 @@ Finally, the graph-representations are saved in gxl format.
      - `--seed`: (optional, default 42) set seed for split
         
      json file needs to be in the following structure (output of `make-endpoint-json.py`): <br />
-       >patient-id:<br />
-       >>filename:<br />
+       >patient-id: patient-id<br />
+       >>filename: file name<br />
          folder: folder name<br />
          endpoint1: endpoint value<br />
          endpoint2: endpoint value<br />

@@ -13,6 +13,7 @@ which are compatible to be loaded in ASAP.
 Finally, the graph-representations are saved in gxl format.
 
 ## Files and Functionalities
+### Convert detections to graphs (gxl files)
 1. `tif_annotations_to_numpy.py`: Extracts the detection output
    - **Input**:
      - `--tif-files-folder`: path to folder with the tif files that contain the overlay. It expects the detected buds to
@@ -65,6 +66,66 @@ Finally, the graph-representations are saved in gxl format.
      - `--output-folder`: folder where the output is saved to
    - **Output**: 
      - one gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
+
+### Convert endpoints to dataset split (cxl files)
+1. `make-endpoint-json.py`: sets up json dictionary based on excel file
+   - **Input**:
+     - `--output-path`: where the json files should be saved to
+     - `--excel-path`: path to the excel with the data
+     - `--sheet-name`: (optional) name of the excel sheet that contains the data
+     - `--endpoints`: name(s) of the column that should be used as an end-point --> comma separated if multiple
+     - `--json-path`: (optional) json file that should be extended
+    
+     The excel file is expected to have the following columns:
+     - filename: name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
+     - folder: folder where the slide is saved
+     - Patient-ID: first part of the filename (e.g patient1)
+     - A column(s) named after the `--endpoints` argument, e.g. N group:<br />
+       >  0 : 0 in TNM stage<br />
+          1 : 1 in TNM stage<br />
+          2 : only follow up (>= 2 years), no recurrence<br />
+          3 : only follow up (>= 2 years) with recurrence
+           
+   - **Input**:
+     - json file with structure: <br />
+       >patient-id:<br />
+       >>filename:<br />
+         folder: folder name<br />
+         endpoint1: endpoint value<br />
+         endpoint2: endpoint value<br />
+         ...
+
+1. `endpoints-json-to-cxl.py`: sets up json dictionary based on excel file
+   - **Input**:
+     - `--output-path`: where the cxl files should be saved to
+     - `--json-path`: path to the json file with the endpoint(s) data
+     - `--endpoint`: name of the variable (in the dict) that encodes the end-point (only 1!)
+     - `--dataset-name`: name that should be given to the dataset in the xml files
+     - `--split`: (optional, default 0.4) how much should be split off for train and test (will be split in half for test valid) 
+     - `--seed`: (optional, default 42) set seed for split
+        
+     json file needs to be in the following structure (output of `make-endpoint-json.py`): <br />
+       >patient-id:<br />
+       >>filename:<br />
+         folder: folder name<br />
+         endpoint1: endpoint value<br />
+         endpoint2: endpoint value<br />
+         ...
+
+   - **Output**:
+      - 3 xml files (train.cxl, vaild.cxl and test.cxl) as in the IAMDB structure:
+          > \<GraphCollection><br />
+          \<BT-Hotspots counts="49" endpoint="N"><br />
+                \<print file="file1.gxl" class="0"/><br />
+                \<print file="file2.gxl" class="0"/><br />
+                ...<br />
+                \<print file="file49.gxl" class="2"/><br />
+          </BT-Hotspots><br />
+          </GraphCollection>
+          
+          Where `BT-Hotspots` is the `--dataset-name`, `counts` is the number of elements in the subset,
+          and `enpoint` is the `--endpoint`.
+
 
 ## Installation requirements
 Install the conda environment with `conda env create -f environment.yml`. 

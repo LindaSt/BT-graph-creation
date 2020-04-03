@@ -14,7 +14,7 @@ Finally, the graph-representations are saved in gxl format.
 
 ## Files and Functionalities
 ### Convert detections to graphs (gxl files)
-1. `tif_annotations_to_numpy.py`: Extracts the detection output
+1. `extract_coord_from_tiff`: Extracts the detection output
    - **Input**:
      - `--tif-files-folder`: path to folder with the tif files that contain the overlay. It expects the detected buds to
      have an index of 3 and the lymphocytes to have an index of 9 (value in the image). The detections are marked as rectangles.
@@ -26,7 +26,7 @@ Finally, the graph-representations are saved in gxl format.
      - Two text files per WSI: one file each for the tumor buds and the lymphocytes with the coordinates.
      - Json file: contains the spacing for each WSI.
 
-1. `annotation_coordinates_to_xml.py`: Creates an ASAP-xml file from the coordinate text files
+1. `coord_to_xml.py`: Creates an ASAP-xml file from the coordinate text files
    - **Input**:
      - `--coordinates-txt-files-folder`: folder with the text files of the coordinates for 
       'lymphocytes', 'tumorbuds' or 'hotspot'(one file per annotation, 
@@ -42,13 +42,13 @@ Finally, the graph-representations are saved in gxl format.
    - **Output**:
      - Up to three text files per WSI (depending on how many annotations there are in the xml).
 
-1. `create_hotspot_graphs.py`: retrieves only the elements within a certain area.
+1. `reduce-coord-to-hotspot.py`: retrieves only the elements within a certain area.
    - **Input**:
-     - `---xml-hotspots`: folder with the xml files of the hotspots
+     - `--hotspot-xmls`: folder with the xml files of the hotspots
      - `--coordinate-txt-files`: folder with the text files of the coordinates of the lymphocytes and tumor buds
      - `--output-folder`: folder where the output is saved to
-   - **Output**: Contains only the detected elements within the hotspot.
-     - Folder with coordinate text files: three files per WSI (one for the hotspot, one for the lymphocytes, one
+   - **Output**: Contains only the detected elements within the selection.
+     - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
        for the tumor buds)
      - Folder with xml files: one pre WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
@@ -69,8 +69,8 @@ Finally, the graph-representations are saved in gxl format.
      - folder: folder where the slide is saved
      - Patient-ID: first part of the filename (e.g patient1)
      - A column(s) named after the `--endpoints` argument, e.g. N group:<br />
-       >  0 : 0 in TNM stage<br />
-          1 : 1 in TNM stage<br />
+       >  0 : N0 in TNM stage<br />
+          1 : N1 in TNM stage<br />
           2 : only follow up (>= 2 years), no recurrence<br />
           3 : only follow up (>= 2 years) with recurrence
            

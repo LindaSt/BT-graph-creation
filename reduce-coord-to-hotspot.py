@@ -4,9 +4,8 @@ import numpy as np
 from lxml import etree as ET
 import argparse
 import re
-from .annotation_coordinates_to_xml import create_asap_xml
-from .xml_to_txt_file import process_xml_files
-
+from coord_to_xml import create_asap_xml
+from xml_to_txt_file import process_xml_files
 
 def setup_output_folders(output_path):
     # set / create the output
@@ -55,8 +54,8 @@ def read_hotspot_xmls(hotspot_xmls):
 
 
 def parse_hotspot_xml(hotspot_path, txt_output):
-    # TODO make this so that only new files are added and existing ones are skipped
     hotspot_xmls = glob.glob(os.path.join(hotspot_path, r'*.xml'))
+
     # make txt files
     process_xml_files(hotspot_xmls, txt_output)
     # rename the hotspot txt files to add '_output' into them so all the files have the same name
@@ -78,7 +77,29 @@ def create_asap_xmls(all_txt_files, xml_output):
     create_asap_xml(files_to_process, xml_output)
 
 
-def create_hotspot_only_txt_files(coor_txt_files_path, txt_output, all_hotspots):
+def check_output(txt_output, xml_output, all_hotspots):
+    # make sure all the hotspots were processed and that there are three txt files for each hotspot
+    txt_files = [os.path.basename(f).split('_CD8')[0] for f in glob.glob(txt_output+'/*.txt')]
+    txt_files_ids = set(txt_files)
+    xml_files_ids = set([os.path.basename(f).split('_CD8')[0] for f in glob.glob(xml_output+'/*.xml')])
+    hotspot_ids = set([os.path.basename(f).split('_CD8')[0] for f in all_hotspots])
+
+    # check that there are three files for each hotspot
+    text_files_unique = np.unique(txt_files, return_counts=True)
+    not_three =', '.join([text_files_unique[0][i] for i, count in enumerate(text_files_unique[1]) if count != 3])
+    print(f'Not three output text files for files {not_three}')
+
+    # check for missing files
+    missing_txt_files = ', '.join(list(hotspot_ids - txt_files_ids))
+    missing_xml_files = ', '.join(list(hotspot_ids - xml_files_ids))
+
+    print(f'# hotspots: {len(hotspot_ids)} | # text files: {len(txt_files_ids)} | # xml files: {len(xml_files_ids)}')
+    print(f'missing text files for hotspot(s) {missing_txt_files}')
+    print(f'missing xml files for hotspot(s) {missing_xml_files}')
+
+
+
+def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots):
     coor_txt_files_path = os.path.join(coor_txt_files_path, r'*_coordinates_*.txt')
     all_txt_files = glob.glob(coor_txt_files_path)
     txt_files_to_process = list(set([re.search(r'(.*)_output_coordinates', f).group(1) for f in all_txt_files]))
@@ -99,7 +120,7 @@ def create_hotspot_only_txt_files(coor_txt_files_path, txt_output, all_hotspots)
                 if os.path.isfile(file_path):
                     coordinates = np.loadtxt(file_path)
 
-                    # iterate over hotspots
+                    # iterate over hotspot files
                     for h in hotspots:
                         in_hotspot = [in_square(h, i) for i in coordinates]
                         coord_in_hotspot[group] = coordinates[in_hotspot]
@@ -111,8 +132,13 @@ def create_hotspot_only_txt_files(coor_txt_files_path, txt_output, all_hotspots)
                             print('The coordinates file {} already exists'.format(output_txt_file))
                 else:
                     print('File {} does not exist. Continuing...'.format(file_path))
+            else:
+                print(f'No hotspots xml for file {os.path.basename(file)}')
 
     create_asap_xmls(output_text_files, xml_output)
+
+    # make sure all the hotspots were processed and that there are three txt files for each hotspot
+    check_output(txt_output, xml_output, all_hotspots.keys())
 
 
 if __name__ == '__main__':
@@ -122,7 +148,7 @@ if __name__ == '__main__':
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
     args = parser.parse_args()
 
-    hotspot_path = args.hotspot_path
+    hotspot_path = args.xml_hotspots
 
     output_path = args.output_folder
     xml_output, txt_output = setup_output_folders(output_path)
@@ -133,6 +159,4 @@ if __name__ == '__main__':
     coordinate_txt_files = args.coordinate_txt_files
 
     # create the hotspot asap and txt files
-    create_hotspot_only_txt_files(coordinate_txt_files, txt_output, hotspots)
-
-
+    create_hotspot_only_txt_files(coordinate_txt_files, xml_output, txt_output, hotspots)

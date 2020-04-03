@@ -64,7 +64,7 @@ def process_files(files_to_process, output_base_path, step_size, spacing_json_fi
     if spacing_json_filepath:
         all_spacing = json.load(spacing_json_filepath)
     else:
-        all_spacing= {}
+        all_spacing = {}
 
     for file in files_to_process:
         file_name = os.path.splitext(os.path.basename(file))[0].split("_combined")[0]

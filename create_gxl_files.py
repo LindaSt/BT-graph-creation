@@ -9,14 +9,6 @@ from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
 import fire
 
-# node_dict = {0: {'type': 'tumorbud', 'X': 1.1, 'Y': 2.2}, 1: {'type': 'tumorbud', 'X': 6.1, 'Y': 4.2},
-#              3: {'type': 'lymphocyte', 'X': 8.0, 'Y': 5.0}, 2: {'type': 'lymphocyte', 'X': 1.7, 'Y': 2.5}}
-#
-# edge_dict = {0: {'from_to': (0, 1), 'distance': 12.36}, 1: {'from_to': (1, 2), 'distance': 1.36}, 2: {'from_to': (0, 2), 'distance': 58.36}}
-
-# tree = make_gxl_tree('bla', node_dict, edge_dict)
-# e = ET.ElementTree(tree).write(r"test.gxl", pretty_print=True)
-
 # class GraphElement:
 #     def __init__(self, element_id, element_type):
 #         self.features = {}
@@ -39,20 +31,6 @@ import fire
 #             pass
 #         if self.type == 'node':
 
-
-def connect_tumorbuds(coo_matrix, edge_features, all_buds):
-    all_bud_ids = list(all_buds.keys())
-    if len(all_bud_ids) > 0:
-        for i in range(len(all_buds)):
-            for j in range(i+1, len(all_buds)):
-                tb1 = all_buds[all_bud_ids[i]]
-                tb2 = all_buds[all_bud_ids[j]]
-                d = distance.euclidean(tb1, tb2)
-                coo_matrix.append([all_bud_ids[i], all_bud_ids[j]])
-                edge_features.append(d)
-    return coo_matrix, edge_features
-
-
 class EdgeConfig:
     """
     This class decodes the edge definition arguments
@@ -68,6 +46,7 @@ class EdgeConfig:
     @property
     def fully_connected(self):
         return self._fully_connected
+
     @fully_connected.setter
     def fully_connected(self, fully_connected):
         if fully_connected is not None:
@@ -116,11 +95,10 @@ class Graph:
     """
     Creates a graph object from a list of text files that all need to have the same ID
 
-    file_id: silde_name
+    file_id: slide_name
     file_path: path to the files (without the ending, e.g. folder/slide_name_output)
     spacing: spacing from ASAP (list, e.g [0.24, 0.24])
     edge_config: EdgeConfig object
-
     """
     def __init__(self, file_id, file_path, spacing, edge_config=None):
         print(f'Creating graph for id {file_id}.')
@@ -129,25 +107,29 @@ class Graph:
         self.spacing = spacing
 
         # get the node dict splits
-        self.xy_tb_nodes, self.xy_lymph_nodes = self.get_split_node_dicts()
+        self.xy_tb_nodes, self.xy_lymph_nodes = self._get_split_node_dicts()
 
         # set up the edges
         self.edge_config = edge_config.edge_definitions
         self.edge_dict = {}
         self.add_edges()
 
+    # *********** properties ***********
+    @property
+    def xy_all_nodes(self) -> dict:
+        return {node_id: (node_attrib['x'], node_attrib['y']) for node_id, node_attrib in self.node_dict.items()}
 
     @property
-    def spacing(self):
+    def spacing(self) -> float:
         return self._spacing
 
     @spacing.setter
-    def spacing(self, spacing):
+    def spacing(self, spacing) -> float:
         assert spacing[0] == spacing[1]
         self._spacing = spacing[0]
 
     @property
-    def hotspot_coordinates(self):
+    def hotspot_coordinates(self) -> np.ndarray:
         # get the hotspot coordinates
         hotspot_path = f'{self.file_path}_coordinates_hotspot.txt'
         hotspot_coordinates = np.loadtxt(hotspot_path)
@@ -156,7 +138,7 @@ class Graph:
         return hotspot_coordinates
 
     @property
-    def node_dict(self):
+    def node_dict(self) -> dict:
         """
         returns a dict with all the nodes {node_id: [node_attributes]}
         """
@@ -186,6 +168,7 @@ class Graph:
 
         return node_dict
 
+    # *********** adding edges ***********
     def add_edges(self):
         """
         Adds all the edge to self.edge_dict in this format {edge_id: {'feature name 1': feature_value1, ...}, ...}
@@ -198,6 +181,26 @@ class Graph:
                 # edge_fct can be {'fully_connected', 'tb_to_tb', 'tb_to_l'}
                 eval(f'self.{edge_type}')(param_list)
 
+    def update_edge_dict(self, coo_matrix, edge_features, feature_name):
+        """
+        Updates self.edge_dict based on the coo_matrix and the edge_features list for a specific features (feature_name)
+
+        The edge ID is the sorted string concatenation of the two node ids.
+        The edge id of node 5 and node 0 is therefore '0_5'
+        """
+        # update the dictionary
+        for edge, feature in zip(coo_matrix, edge_features):
+            edge_id = [str(i) for i in sorted(edge)]
+            edge_id_str = '_'.join(edge_id)
+            # if the edge already exists, just add the edge features
+            if edge_id_str in self.edge_dict.keys():
+                assert feature_name not in self.edge_dict[edge_id_str] # fix this for tb to tb
+                self.edge_dict[edge_id_str][feature_name] = feature
+            # if the edge does not exist, add it plus the feature
+            else:
+                self.edge_dict[edge_id_str] = {feature_name: feature, 'from_to': tuple(edge_id)}
+
+    # *********** edge insertion functions ***********
     def tb_to_l(self, param_list):
         edge_fct = param_list[0]
         params = param_list[1:]
@@ -211,29 +214,26 @@ class Graph:
         eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_tb_nodes, params)
 
     def fully_connected(self, params):
-        # params is a list containing one of the following 'all', 'tumorbuds' or 'lymphocytes'
-        # TODO continue here
-        assert type(params) == str
+        # params should either be 'all', 'tumorbuds' or 'lymphocytes'
+        assert params in ['all', 'tumorbuds', 'lymphocytes']
+        node_dict = {'all': self.xy_all_nodes, 'tumorbuds': self.xy_tb_nodes, 'lymphocytes': self.xy_lymph_nodes}
+        self.fully_connect(node_dict[params])
 
-        pass
+    def fully_connect(self, node_dict):
+        # calculate the distances
+        coo_matrix = []
+        edge_features = []
 
-    def update_edge_dict(self, coo_matrix, edge_features, feature_name):
-        """
-        Updates self.edge_dict based on the coo_matrix and the edge_features list for a specific features (feature_name)
-
-        The edge ID is the sorted string concatenation of the two node ids.
-        The edge id of node 5 and node 0 is therefore '05'
-        """
+        dict_ids = list(node_dict.keys())
+        for i in range(len(node_dict)):
+            for j in range(i + 1, len(node_dict)):
+                n1 = node_dict[dict_ids[i]]
+                n2 = node_dict[dict_ids[j]]
+                d = distance.euclidean(n1, n2)
+                coo_matrix.append([dict_ids[i], dict_ids[j]])
+                edge_features.append(d)
         # update the dictionary
-        for edge, feature in zip(coo_matrix, edge_features):
-            edge_id = ''.join([str(i) for i in sorted(edge)])
-            # if the edge already exists, just add the edge features
-            if edge_id in self.edge_dict.keys():
-                assert feature_name not in self.edge_dict[edge_id] # fix this for tb to tb
-                self.edge_dict[edge_id][feature_name] = feature
-            # if the edge does not exist, add it plus the feature
-            else:
-                self.edge_dict[edge_id] = {feature_name: feature}
+        self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
 
     def radius(self, center_dict, perimeter_dict, x):
         assert len(x) == 1
@@ -254,15 +254,16 @@ class Graph:
         self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
 
     def kNN(self, center_dict, perimeter_dict, k, distance_metric='euclidean'):
-        # TODO: make this work with kNN
         assert len(k) == 1
         k = orig_k = k.pop()
         # calculate the distances
         coo_matrix = []
         edge_features = []
         # set-up in format for NearestNeighbors
-        training_set = [perimeter_dict[i] for i in sorted(perimeter_dict.keys())]
-        test_set = [center_dict[i] for i in sorted(center_dict.keys())]
+        perimeter_keys = sorted(perimeter_dict.keys())
+        center_keys = sorted(center_dict.keys())
+        training_set = [perimeter_dict[i] for i in perimeter_keys]
+        test_set = [center_dict[i] for i in center_keys]
 
         # only insert edges if we have elements in the lists
         if len(training_set) > 0 and len(test_set) > 0:
@@ -279,30 +280,35 @@ class Graph:
             for ind1, (indices, distances) in enumerate(zip(match_list, distances_list)):
                 for ind2, d in zip(indices, distances):
                     # ignore self matches and check for duplicates
-                    if ind1 != ind2 and sorted([ind1, ind2]) not in coo_matrix:
-                        coo_matrix.append(sorted([ind1, ind2]))
+                    # get the actual node ids
+                    node_ind1 = center_keys[ind1]
+                    node_ind2 = perimeter_keys[ind2]
+                    if node_ind1 != node_ind2 and sorted([node_ind1, node_ind2]) not in coo_matrix:
+                        coo_matrix.append(sorted([node_ind1, node_ind2]))
                         edge_features.append(d)
 
         # update the dictionary
         self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
 
+    # *********** gxl creation ***********
+    def sanity_check(self):
+        node_ids = self.node_dict.keys()
+        edge_ids = self.edge_dict.keys()
+
+        # make sure all edges point to an existing node
+        nodes_in_edges = [i.split('_') for i in edge_ids]
+        nodes_in_edges = set([int(val) for sublist in nodes_in_edges for val in sublist])
+        assert len(nodes_in_edges - set(node_ids)) == 0
+
     def get_gxl(self):
         """
-        edge_config: EdgeConfig object
-
         returns the xml-tree for the gxl file
         """
         print(f'Creating gxl file for {self.file_id}.')
-
-        # TODO: sanity check. Only edges for valid nodes. All edges and nodes have the same number of features.
-        # TODO: continue here
-        node_dict = self.node_dict
-        edge_dict = self.edge_dict
-        return self.make_gxl_tree()
-
-    def make_gxl_tree(self):
-        # TODO: for edges: self.edge_dict[i] = {'from_to': tuple(edge), feature_name: feature}
-
+        # TODO: Make additional json with mean and std to gxl tree --> check that all edges and nodes have the same number of features
+        # TODO: adjust x and y to make relative to the hotspot coordinates. add hot-spot coordinates to gxl?
+        # TODO: center the distances? --> do in gxl loader of gale
+        self.sanity_check()
         type_dict = {'str': 'string', 'int': 'int', 'float': 'float'}
 
         # initiate the tree
@@ -322,9 +328,9 @@ class Graph:
                 attrib_val_gxl.text = str(attrib_value)
 
         # add the edges
-        for edge_id, edge_attrib in self.edge_dict.items():
+        for edge_id, (_, edge_attrib) in enumerate(self.edge_dict.items()):
             from_, to_ = edge_attrib.pop('from_to')
-            edge_gxl = ET.SubElement(graph_gxl, 'edge', {'from': '_{}'.format(from_), 'to': '_{}'.format(to_)})
+            edge_gxl = ET.SubElement(graph_gxl, 'edge', {'from': f'_{from_}', 'to': f'_{to_}'})
             for attrib_name, attrib_value in edge_attrib.items():
                 attrib_gxl = ET.SubElement(edge_gxl, 'attr', {'name': attrib_name})
                 t = re.search(r'(\D*)', type(attrib_value).__name__).group(1)
@@ -332,9 +338,11 @@ class Graph:
                 attrib_val_gxl.text = str(attrib_value)
 
         e = ET.dump(xml_tree)
+
         return xml_tree
 
-    def get_split_node_dicts(self):
+    # *********** helper functions ***********
+    def _get_split_node_dicts(self) -> tuple:
         # splits the nodes dict into the two classes
         all_buds = {}
         all_lymphs = {}
@@ -354,7 +362,7 @@ class GxlFilesCreator:
     """
     Creates the xml trees from the text files with the coordinates
     """
-    def __init__(self, files_to_process, spacings, edge_config):
+    def __init__(self, files_to_process, spacings, edge_config, normalize=False):
         """
         files_to_process: list of paths to the files that should be processed
         spacings: dictionary that contains the spacing for each WSI (read from the spacing.json)
@@ -363,6 +371,7 @@ class GxlFilesCreator:
         self.files_to_process = files_to_process
         self.edge_config = edge_config
         self.spacings = spacings
+        self.normalize = normalize
 
     @property
     def graphs(self) -> dict:
@@ -374,7 +383,15 @@ class GxlFilesCreator:
         """
         creates dictionary {file_id: xml-tree}
         """
-        return {file_id: graph.get_gxl() for file_id, graph in self.graphs}
+        return {file_id: graph.get_gxl() for file_id, graph in self.graphs.items()}
+
+    @property
+    def normalized_gxl_trees(self) -> dict:
+        """
+        creates dictionary {file_id: xml-tree}
+        """
+        mean_sd = {}
+        return {file_id: graph.get_normalized_gxl(mean_sd) for file_id, graph in self.graphs}
 
     def save(self, output_folder):
         # create output folder if it does not exist
@@ -385,25 +402,34 @@ class GxlFilesCreator:
         for file_id, tree in self.gxl_trees.items():
             ET.ElementTree(tree).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
 
+        # if normalize = True, then also create an output folder for the normalized graphs and save them there
+        if self.normalize:
+            output_path_norm = f'{output_path}_norm'
+            if not os.path.isdir(output_path_norm):
+                os.mkdir(output_path_norm)
+            # save the xml trees
+            for file_id, tree in self.normalized_gxl_trees.items():
+                ET.ElementTree(tree).write(os.path.join(output_path_norm, file_id + '.gxl'), pretty_print=True)
 
 
 def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_def_tb_to_l=None, edge_def_tb_to_tb=None,
                      fully_connected=None):
     """
     INPUT
-     --coord-txt-files-folder: path to the folder with the coordinates text files
-     --spacing-json: Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
-     --edge-def-tb-to-l (optional):
-       - radius-x: connect elements in radius X (in mikrometer)
-       - to-X-nn: connect to k closest elements where X is the number of neighbours
-       - to-all: connect to all elements
-     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
-     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
-     --output-folder: path to where output folder should be created
+    --coord-txt-files-folder: path to the folder with the coordinates text files
+    --spacing-json: Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
+    --edge-def-tb-to-l (optional):
+      - radius-x: connect elements in radius X (in mikrometer)
+      - to-X-nn: connect to k closest elements where X is the number of neighbours
+      - to-all: connect to all elements
+    --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
+    --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
+    --output-folder: path to where output folder should be created
+    --normalize: (optional) if set, creates a second folder with gxl-files with z-normalized features ( z = (x - x(avg)) / std)
 
-     OUTPUT
-     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
-
+    OUTPUT
+    One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
+    The distances are centered (xy - xy(average)).
     """
     # get the edge definitions
     edge_def_config = EdgeConfig(edge_def_tb_to_l, edge_def_tb_to_tb, fully_connected)
@@ -412,6 +438,7 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     spacing_json = r'{}'.format(spacing_json)
     with open(spacing_json) as data_file:
         spacings = json.load(data_file)
+    spacings['bla'] = [0.24279740452766418, 0.24279740452766418]
 
     # get a list of all the txt files to process
     input_path = os.path.join(coord_txt_files_folder, r'*_coordinates_*.txt')
@@ -420,7 +447,7 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
 
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process, spacings, edge_def_config)
-    gxl_files.graphs
+    graphs = gxl_files.graphs
     gxl_files.gxl_trees
     # save the gxl files
     gxl_files.save(output_folder)

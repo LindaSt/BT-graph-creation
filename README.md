@@ -53,7 +53,7 @@ Finally, the graph-representations are saved in gxl format.
      - Folder with xml files: one pre WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
        
-1. TODO: `create_gxl_files.py`: creates the graphs as gxl files
+1. `create_gxl_files.py`: creates the graphs as gxl files
    - **Input**:
      - `--coordinates-txt-files-folder`: path to the folder with the coordinates text files
      - `--spacing-json`: Path to json file that contains the spacing for each whole slide image. 
@@ -62,10 +62,14 @@ Finally, the graph-representations are saved in gxl format.
        - `radius-x`: connect elements in radius X (in mikrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
        - `to-all`: connect to all elements
-     - `--fully-connected`: make a fully connected graph (supersedes the `--edge-definition...`)
+     - `--fully-connected`: supersedes the `--edge-definition*`. Following options:
+       - `all`: fully connected graph
+       - `lymphocytes`: only the lymphocytes are fully connected
+       - `tumorbuds`: only the tumorbuds are fully connected
      - `--output-folder`: path to where output folder should be created
    - **Output**: 
-     - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
+     - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse).
+       The graphs are not pre-processed (features are not normalized, x,y coordinates are not centered)!
 
 ### Convert endpoints to dataset split (cxl files)
 1. `make-endpoint-json.py`: sets up json dictionary based on an excel file

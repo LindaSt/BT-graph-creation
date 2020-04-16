@@ -10,28 +10,6 @@ from sklearn.neighbors import NearestNeighbors
 import fire
 
 
-# class GraphElement:
-#     def __init__(self, element_id, element_type):
-#         self.features = {}
-#         self.id = element_id
-#         self.type(element_type)
-#
-#     @property
-#     def type(self):
-#         return self.type
-#     @type.setter
-#     def type(self, element_type):
-#         assert element_type in ['node', 'edge']
-#         self.type = element_type
-#
-#     def update_features(self, dict):
-#
-#
-#     def gxl_dict(self):
-#         if self.type == 'edge':
-#             pass
-#         if self.type == 'node':
-
 class EdgeConfig:
     """
     This class decodes the edge definition arguments
@@ -393,63 +371,12 @@ class GxlFilesCreator:
         return [Graph(file_id, file_paths, self.spacings[file_id], self.edge_config) for file_id, file_paths in
                 files_dict.items()]
 
-    # @property
-    # def mean_std(self) -> dict:
-    #     node_features, edge_features = self._get_all_features()
-    #     nf = {}
-    #     for feature_name, feature_values in node_features.items():
-    #         nf[feature_name] ={'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #
-    #     sd_mean = {'node_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #                                  for feature_name, feature_values in node_features.items()},
-    #                'edge_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #                                  for feature_name, feature_values in edge_features.items()}}
-    #     return sd_mean
-    #
-    # def _get_all_features(self) -> tuple:
-    #     """
-    #     Get a list of all feature values per feature
-    #     """
-    #     node_dict = {}
-    #     edge_dict = {}
-    #     for g in self.graphs:
-    #         # make sure all the nodes and edge have the same feature names
-    #         if len(node_dict) > 0:
-    #             assert g.node_feature_names in node_dict.keys()
-    #         if len(edge_dict) > 0:
-    #             assert g.edge_feature_names in edge_dict.keys()
-    #         # get the node features
-    #         for _, node_features in g.node_dict.items():
-    #             for feature_name, feature_value in node_features.items():
-    #                 if feature_name not in node_dict:
-    #                     node_dict[feature_name] = [feature_value]
-    #                 else:
-    #                     node_dict[feature_name].append(feature_name)
-    #         # get the edge features
-    #         for _, edge_features in g.edge_dict.items():
-    #             for feature_name, feature_value in edge_features.items():
-    #                 if feature_name not in edge_dict:
-    #                     edge_dict[feature_name] = [feature_value]
-    #                 else:
-    #                     edge_dict[feature_name].append(feature_name)
-    #
-    #     return node_dict, edge_dict
-
     @property
     def gxl_trees(self) -> dict:
         """
         creates dictionary {file_id: xml-tree}
         """
         return {graph.file_id: graph.get_gxl() for graph in self.graphs}
-
-    @property
-    def normalized_gxl_trees(self) -> dict:
-        """
-        creates dictionary {file_id: xml-tree}
-        """
-        # TODO: not implemented
-        mean_std = {}
-        return {graph.file_id: graph.get_normalized_gxl(mean_std) for graph in self.graphs}
 
     def save(self, output_folder):
         # create output folder if it does not exist
@@ -475,7 +402,6 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
     --output-folder: path to where output folder should be created
-    --normalize: (optional) if set, creates a second folder with gxl-files with z-normalized features ( z = (x - x(avg)) / std)
 
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)

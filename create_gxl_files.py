@@ -9,6 +9,7 @@ from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
 import fire
 
+
 # class GraphElement:
 #     def __init__(self, element_id, element_type):
 #         self.features = {}
@@ -38,6 +39,7 @@ class EdgeConfig:
     edge_def_tb_to_tb: "radius-X" or "to-X-nn" where X is a integer --> how should tumor buds be connected
     fully_connected: specify either 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def* arguments)
     """
+
     def __init__(self, edge_def_tb_to_l=None, edge_def_tb_to_tb=None, fully_connected=None):
         self.edge_def_tb_to_l = self.decode(edge_def_tb_to_l)
         self.edge_def_tb_to_tb = self.decode(edge_def_tb_to_tb)
@@ -81,7 +83,8 @@ class EdgeConfig:
             elif '-nn' in edge_def:
                 return ['kNN', int(edge_def.split('-')[1])]
             else:
-                print(f'Invalid input. Choose from "radius-X", "to-X-nn" and "fully-connected" (specify number instead of X)')
+                print(
+                    f'Invalid input. Choose from "radius-X", "to-X-nn" and "fully-connected" (specify number instead of X)')
                 sys.exit()
         else:
             return None
@@ -100,11 +103,16 @@ class Graph:
     spacing: spacing from ASAP (list, e.g [0.24, 0.24])
     edge_config: EdgeConfig object
     """
+
     def __init__(self, file_id, file_path, spacing, edge_config=None):
-        print(f'Creating graph for id {file_id}.')
+        # print(f'Creating graph for id {file_id}.')
         self.file_path = file_path
         self.file_id = file_id
         self.spacing = spacing
+
+        # set the feature names
+        self.node_feature_names = ['type', 'x', 'y']  # TODO: get this automatically?
+        self.edge_feature_names = []  # will get added during self.add_edges()
 
         # get the node dict splits
         self.xy_tb_nodes, self.xy_lymph_nodes = self._get_split_node_dicts()
@@ -129,12 +137,13 @@ class Graph:
         self._spacing = spacing[0]
 
     @property
-    def hotspot_coordinates(self) -> np.ndarray:
+    def hotspot_coordinates(self) -> list:
         # get the hotspot coordinates
         hotspot_path = f'{self.file_path}_coordinates_hotspot.txt'
         hotspot_coordinates = np.loadtxt(hotspot_path)
-        assert len(hotspot_coordinates) == 4
+        assert len(hotspot_coordinates) == 8
         assert isinstance(hotspot_coordinates[0], float)
+        hotspot_coordinates = [tuple([hotspot_coordinates[i], hotspot_coordinates[i + 1]]) for i in range(0, 8, 2)]
         return hotspot_coordinates
 
     @property
@@ -160,8 +169,10 @@ class Graph:
                     assert coordinates.shape[1] == 2
 
                     # multiply by spacing to get the actual coordinates in mikro-meters
-                    # TODO: normalize coordinates by center of hotspot (x - xavg)
                     for i, line in enumerate(coordinates):
+                        # adjust x and y to make relative to the hotspot coordinates.
+                        line -= np.array(self.hotspot_coordinates[0])
+                        assert min(line) >= 0
                         node_dict[i] = {'type': node_name, 'x': line[0] * self.spacing, 'y': line[1] * self.spacing}
             else:
                 print(f'File {file_path} not found. Continuing...')
@@ -194,11 +205,11 @@ class Graph:
             edge_id_str = '_'.join(edge_id)
             # if the edge already exists, just add the edge features
             if edge_id_str in self.edge_dict.keys():
-                assert feature_name not in self.edge_dict[edge_id_str] # fix this for tb to tb
+                assert feature_name not in self.edge_dict[edge_id_str]  # fix this for tb to tb
                 self.edge_dict[edge_id_str][feature_name] = feature
             # if the edge does not exist, add it plus the feature
             else:
-                self.edge_dict[edge_id_str] = {feature_name: feature, 'from_to': tuple(edge_id)}
+                self.edge_dict[edge_id_str] = {feature_name: feature}
 
     # *********** edge insertion functions ***********
     def tb_to_l(self, param_list):
@@ -304,10 +315,7 @@ class Graph:
         """
         returns the xml-tree for the gxl file
         """
-        print(f'Creating gxl file for {self.file_id}.')
-        # TODO: Make additional json with mean and std to gxl tree --> check that all edges and nodes have the same number of features
-        # TODO: adjust x and y to make relative to the hotspot coordinates. add hot-spot coordinates to gxl?
-        # TODO: center the distances? --> do in gxl loader of gale
+        print(f'Creating gxl tree for {self.file_id}.')
         self.sanity_check()
         type_dict = {'str': 'string', 'int': 'int', 'float': 'float'}
 
@@ -317,6 +325,12 @@ class Graph:
         # add the graph level info
         graph_attrib = {'id': self.file_id, 'edgeids': 'false', 'edgemode': 'undirected'}
         graph_gxl = ET.SubElement(xml_tree, 'graph', graph_attrib)
+
+        # add hot-spot coordinates to gxl
+        hotspot_gxl = ET.SubElement(xml_tree, 'hotspot-coordinates')
+        for j, tup in enumerate(self.hotspot_coordinates):
+            coor_attrib = {'Order': str(j), 'X': str(tup[0]), 'Y': str(tup[1])}
+            xml_coordinate = ET.SubElement(hotspot_gxl, 'Coordinate', attrib=coor_attrib)
 
         # add the nodes
         for node_id, node_attrib in self.node_dict.items():
@@ -328,8 +342,8 @@ class Graph:
                 attrib_val_gxl.text = str(attrib_value)
 
         # add the edges
-        for edge_id, (_, edge_attrib) in enumerate(self.edge_dict.items()):
-            from_, to_ = edge_attrib.pop('from_to')
+        for edge_id, (edge_name, edge_attrib) in enumerate(self.edge_dict.items()):
+            from_, to_ = edge_name.split('_')
             edge_gxl = ET.SubElement(graph_gxl, 'edge', {'from': f'_{from_}', 'to': f'_{to_}'})
             for attrib_name, attrib_value in edge_attrib.items():
                 attrib_gxl = ET.SubElement(edge_gxl, 'attr', {'name': attrib_name})
@@ -338,7 +352,6 @@ class Graph:
                 attrib_val_gxl.text = str(attrib_value)
 
         e = ET.dump(xml_tree)
-
         return xml_tree
 
     # *********** helper functions ***********
@@ -362,6 +375,7 @@ class GxlFilesCreator:
     """
     Creates the xml trees from the text files with the coordinates
     """
+
     def __init__(self, files_to_process, spacings, edge_config, normalize=False):
         """
         files_to_process: list of paths to the files that should be processed
@@ -374,42 +388,78 @@ class GxlFilesCreator:
         self.normalize = normalize
 
     @property
-    def graphs(self) -> dict:
-        files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process} # get rid of '_output' at the end
-        return {file_id: Graph(file_id, file_paths, self.spacings[file_id], self.edge_config) for file_id, file_paths in files_dict.items()}
+    def graphs(self) -> list:
+        files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process}  # get rid of '_output' at the end
+        return [Graph(file_id, file_paths, self.spacings[file_id], self.edge_config) for file_id, file_paths in
+                files_dict.items()]
+
+    # @property
+    # def mean_std(self) -> dict:
+    #     node_features, edge_features = self._get_all_features()
+    #     nf = {}
+    #     for feature_name, feature_values in node_features.items():
+    #         nf[feature_name] ={'mean': np.mean(feature_values), 'std': np.std(feature_values)}
+    #
+    #     sd_mean = {'node_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
+    #                                  for feature_name, feature_values in node_features.items()},
+    #                'edge_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
+    #                                  for feature_name, feature_values in edge_features.items()}}
+    #     return sd_mean
+    #
+    # def _get_all_features(self) -> tuple:
+    #     """
+    #     Get a list of all feature values per feature
+    #     """
+    #     node_dict = {}
+    #     edge_dict = {}
+    #     for g in self.graphs:
+    #         # make sure all the nodes and edge have the same feature names
+    #         if len(node_dict) > 0:
+    #             assert g.node_feature_names in node_dict.keys()
+    #         if len(edge_dict) > 0:
+    #             assert g.edge_feature_names in edge_dict.keys()
+    #         # get the node features
+    #         for _, node_features in g.node_dict.items():
+    #             for feature_name, feature_value in node_features.items():
+    #                 if feature_name not in node_dict:
+    #                     node_dict[feature_name] = [feature_value]
+    #                 else:
+    #                     node_dict[feature_name].append(feature_name)
+    #         # get the edge features
+    #         for _, edge_features in g.edge_dict.items():
+    #             for feature_name, feature_value in edge_features.items():
+    #                 if feature_name not in edge_dict:
+    #                     edge_dict[feature_name] = [feature_value]
+    #                 else:
+    #                     edge_dict[feature_name].append(feature_name)
+    #
+    #     return node_dict, edge_dict
 
     @property
     def gxl_trees(self) -> dict:
         """
         creates dictionary {file_id: xml-tree}
         """
-        return {file_id: graph.get_gxl() for file_id, graph in self.graphs.items()}
+        return {graph.file_id: graph.get_gxl() for graph in self.graphs}
 
     @property
     def normalized_gxl_trees(self) -> dict:
         """
         creates dictionary {file_id: xml-tree}
         """
-        mean_sd = {}
-        return {file_id: graph.get_normalized_gxl(mean_sd) for file_id, graph in self.graphs}
+        # TODO: not implemented
+        mean_std = {}
+        return {graph.file_id: graph.get_normalized_gxl(mean_std) for graph in self.graphs}
 
     def save(self, output_folder):
         # create output folder if it does not exist
-        output_path = os.path.join(output_folder, str(self.edge_def_config))
+        output_path = os.path.join(output_folder, str(self.edge_config))
         if not os.path.isdir(output_path):
-            os.mkdir(output_path)
+            os.makedirs(output_path)
         # save the xml trees
+        print(f'Saving gxl files to {output_path}')
         for file_id, tree in self.gxl_trees.items():
             ET.ElementTree(tree).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
-
-        # if normalize = True, then also create an output folder for the normalized graphs and save them there
-        if self.normalize:
-            output_path_norm = f'{output_path}_norm'
-            if not os.path.isdir(output_path_norm):
-                os.mkdir(output_path_norm)
-            # save the xml trees
-            for file_id, tree in self.normalized_gxl_trees.items():
-                ET.ElementTree(tree).write(os.path.join(output_path_norm, file_id + '.gxl'), pretty_print=True)
 
 
 def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_def_tb_to_l=None, edge_def_tb_to_tb=None,
@@ -447,8 +497,7 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
 
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process, spacings, edge_def_config)
-    graphs = gxl_files.graphs
-    gxl_files.gxl_trees
+
     # save the gxl files
     gxl_files.save(output_folder)
 

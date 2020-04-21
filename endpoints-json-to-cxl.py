@@ -112,7 +112,7 @@ def json_to_cxl(json_path, output_folder, endpoint, dataset_name, split=0.4, see
     test_cxl = get_xml_tree(test_split, dataset_name, endpoint)
 
     # save the xml trees
-    for filename, tree in zip(['train.cxl', 'valid.cxl', 'test.cxl'], [train_cxl, valid_cxl, test_cxl]):
+    for filename, tree in zip(['train.cxl', 'val.cxl', 'test.cxl'], [train_cxl, valid_cxl, test_cxl]):
         ET.ElementTree(tree).write(os.path.join(output_folder, filename), pretty_print=True)
 
 

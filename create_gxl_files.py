@@ -110,7 +110,7 @@ class Graph:
         return self._spacing
 
     @spacing.setter
-    def spacing(self, spacing) -> float:
+    def spacing(self, spacing):
         assert spacing[0] == spacing[1]
         self._spacing = spacing[0]
 
@@ -148,7 +148,7 @@ class Graph:
 
                     # multiply by spacing to get the actual coordinates in mikro-meters
                     for i, line in enumerate(coordinates):
-                        # adjust x and y to make relative to the hotspot coordinates.
+                        # adjust x and y to make relative to the hot-spot coordinates.
                         line -= np.array(self.hotspot_coordinates[0])
                         assert min(line) >= 0
                         node_dict[i] = {'type': node_name, 'x': line[0] * self.spacing, 'y': line[1] * self.spacing}
@@ -398,7 +398,6 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     --edge-def-tb-to-l (optional):
       - radius-x: connect elements in radius X (in mikrometer)
       - to-X-nn: connect to k closest elements where X is the number of neighbours
-      - to-all: connect to all elements
     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
     --output-folder: path to where output folder should be created
@@ -414,7 +413,6 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     spacing_json = r'{}'.format(spacing_json)
     with open(spacing_json) as data_file:
         spacings = json.load(data_file)
-    spacings['bla'] = [0.24279740452766418, 0.24279740452766418]
 
     # get a list of all the txt files to process
     input_path = os.path.join(coord_txt_files_folder, r'*_coordinates_*.txt')

@@ -61,7 +61,6 @@ Finally, the graph-representations are saved in gxl format.
      - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 
        - `radius-x`: connect elements in radius X (in mikrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
-       - `to-all`: connect to all elements
      - `--fully-connected`: supersedes the `--edge-definition*`. Following options:
        - `all`: fully connected graph
        - `lymphocytes`: only the lymphocytes are fully connected

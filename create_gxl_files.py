@@ -8,6 +8,7 @@ import json
 from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
 import fire
+import sys
 
 
 class EdgeConfig:
@@ -329,7 +330,7 @@ class Graph:
                 attrib_val_gxl = ET.SubElement(attrib_gxl, type_dict[t])
                 attrib_val_gxl.text = str(attrib_value)
 
-        e = ET.dump(xml_tree)
+        # e = ET.dump(xml_tree)
         return xml_tree
 
     # *********** helper functions ***********
@@ -368,7 +369,7 @@ class GxlFilesCreator:
     @property
     def graphs(self) -> list:
         files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process}  # get rid of '_output' at the end
-        return [Graph(file_id, file_paths, self.spacings[file_id], self.edge_config) for file_id, file_paths in
+        return [Graph(file_id, files_path, self.spacings[file_id], self.edge_config) for file_id, files_path in
                 files_dict.items()]
 
     @property
@@ -385,8 +386,10 @@ class GxlFilesCreator:
             os.makedirs(output_path)
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
-        for file_id, tree in self.gxl_trees.items():
-            ET.ElementTree(tree).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
+        for file_path in self.files_to_process:
+            file_id = os.path.basename(file_path)[:-7]
+            graph = Graph(file_id, file_path, self.spacings[file_id], self.edge_config)
+            ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
 
 
 def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_def_tb_to_l=None, edge_def_tb_to_tb=None,
@@ -415,9 +418,14 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
         spacings = json.load(data_file)
 
     # get a list of all the txt files to process
-    input_path = os.path.join(coord_txt_files_folder, r'*_coordinates_*.txt')
-    all_files = glob.glob(input_path)
+    if not os.path.isdir(coord_txt_files_folder):
+        print(f'Folder {coord_txt_files_folder} does not exist. Exiting...')
+        sys.exit(-1)
+    all_files = glob.glob(os.path.join(coord_txt_files_folder, '*coordinates*.txt'))
     files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
+    if len(files_to_process) == 0:
+        print(f'No files found to process! Exiting...')
+        sys.exit(-1)
 
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process, spacings, edge_def_config)

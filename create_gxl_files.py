@@ -8,29 +8,8 @@ import json
 from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
 import fire
+import sys
 
-
-# class GraphElement:
-#     def __init__(self, element_id, element_type):
-#         self.features = {}
-#         self.id = element_id
-#         self.type(element_type)
-#
-#     @property
-#     def type(self):
-#         return self.type
-#     @type.setter
-#     def type(self, element_type):
-#         assert element_type in ['node', 'edge']
-#         self.type = element_type
-#
-#     def update_features(self, dict):
-#
-#
-#     def gxl_dict(self):
-#         if self.type == 'edge':
-#             pass
-#         if self.type == 'node':
 
 class EdgeConfig:
     """
@@ -132,7 +111,7 @@ class Graph:
         return self._spacing
 
     @spacing.setter
-    def spacing(self, spacing) -> float:
+    def spacing(self, spacing):
         assert spacing[0] == spacing[1]
         self._spacing = spacing[0]
 
@@ -170,7 +149,7 @@ class Graph:
 
                     # multiply by spacing to get the actual coordinates in mikro-meters
                     for i, line in enumerate(coordinates):
-                        # adjust x and y to make relative to the hotspot coordinates.
+                        # adjust x and y to make relative to the hot-spot coordinates.
                         line -= np.array(self.hotspot_coordinates[0])
                         assert min(line) >= 0
                         node_dict[i] = {'type': node_name, 'x': line[0] * self.spacing, 'y': line[1] * self.spacing}
@@ -351,7 +330,7 @@ class Graph:
                 attrib_val_gxl = ET.SubElement(attrib_gxl, type_dict[t])
                 attrib_val_gxl.text = str(attrib_value)
 
-        e = ET.dump(xml_tree)
+        # e = ET.dump(xml_tree)
         return xml_tree
 
     # *********** helper functions ***********
@@ -390,50 +369,8 @@ class GxlFilesCreator:
     @property
     def graphs(self) -> list:
         files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process}  # get rid of '_output' at the end
-        return [Graph(file_id, file_paths, self.spacings[file_id], self.edge_config) for file_id, file_paths in
+        return [Graph(file_id, files_path, self.spacings[file_id], self.edge_config) for file_id, files_path in
                 files_dict.items()]
-
-    # @property
-    # def mean_std(self) -> dict:
-    #     node_features, edge_features = self._get_all_features()
-    #     nf = {}
-    #     for feature_name, feature_values in node_features.items():
-    #         nf[feature_name] ={'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #
-    #     sd_mean = {'node_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #                                  for feature_name, feature_values in node_features.items()},
-    #                'edge_features': {feature_name: {'mean': np.mean(feature_values), 'std': np.std(feature_values)}
-    #                                  for feature_name, feature_values in edge_features.items()}}
-    #     return sd_mean
-    #
-    # def _get_all_features(self) -> tuple:
-    #     """
-    #     Get a list of all feature values per feature
-    #     """
-    #     node_dict = {}
-    #     edge_dict = {}
-    #     for g in self.graphs:
-    #         # make sure all the nodes and edge have the same feature names
-    #         if len(node_dict) > 0:
-    #             assert g.node_feature_names in node_dict.keys()
-    #         if len(edge_dict) > 0:
-    #             assert g.edge_feature_names in edge_dict.keys()
-    #         # get the node features
-    #         for _, node_features in g.node_dict.items():
-    #             for feature_name, feature_value in node_features.items():
-    #                 if feature_name not in node_dict:
-    #                     node_dict[feature_name] = [feature_value]
-    #                 else:
-    #                     node_dict[feature_name].append(feature_name)
-    #         # get the edge features
-    #         for _, edge_features in g.edge_dict.items():
-    #             for feature_name, feature_value in edge_features.items():
-    #                 if feature_name not in edge_dict:
-    #                     edge_dict[feature_name] = [feature_value]
-    #                 else:
-    #                     edge_dict[feature_name].append(feature_name)
-    #
-    #     return node_dict, edge_dict
 
     @property
     def gxl_trees(self) -> dict:
@@ -442,15 +379,6 @@ class GxlFilesCreator:
         """
         return {graph.file_id: graph.get_gxl() for graph in self.graphs}
 
-    @property
-    def normalized_gxl_trees(self) -> dict:
-        """
-        creates dictionary {file_id: xml-tree}
-        """
-        # TODO: not implemented
-        mean_std = {}
-        return {graph.file_id: graph.get_normalized_gxl(mean_std) for graph in self.graphs}
-
     def save(self, output_folder):
         # create output folder if it does not exist
         output_path = os.path.join(output_folder, str(self.edge_config))
@@ -458,8 +386,10 @@ class GxlFilesCreator:
             os.makedirs(output_path)
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
-        for file_id, tree in self.gxl_trees.items():
-            ET.ElementTree(tree).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
+        for file_path in self.files_to_process:
+            file_id = os.path.basename(file_path)[:-7]
+            graph = Graph(file_id, file_path, self.spacings[file_id], self.edge_config)
+            ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
 
 
 def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_def_tb_to_l=None, edge_def_tb_to_tb=None,
@@ -471,11 +401,9 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     --edge-def-tb-to-l (optional):
       - radius-x: connect elements in radius X (in mikrometer)
       - to-X-nn: connect to k closest elements where X is the number of neighbours
-      - to-all: connect to all elements
     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
     --output-folder: path to where output folder should be created
-    --normalize: (optional) if set, creates a second folder with gxl-files with z-normalized features ( z = (x - x(avg)) / std)
 
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
@@ -488,12 +416,16 @@ def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_d
     spacing_json = r'{}'.format(spacing_json)
     with open(spacing_json) as data_file:
         spacings = json.load(data_file)
-    spacings['bla'] = [0.24279740452766418, 0.24279740452766418]
 
     # get a list of all the txt files to process
-    input_path = os.path.join(coord_txt_files_folder, r'*_coordinates_*.txt')
-    all_files = glob.glob(input_path)
+    if not os.path.isdir(coord_txt_files_folder):
+        print(f'Folder {coord_txt_files_folder} does not exist. Exiting...')
+        sys.exit(-1)
+    all_files = glob.glob(os.path.join(coord_txt_files_folder, '*coordinates*.txt'))
     files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
+    if len(files_to_process) == 0:
+        print(f'No files found to process! Exiting...')
+        sys.exit(-1)
 
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process, spacings, edge_def_config)

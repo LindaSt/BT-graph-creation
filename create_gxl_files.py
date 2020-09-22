@@ -2,7 +2,6 @@ import glob
 import os
 import numpy as np
 from lxml import etree as ET
-import sys
 import re
 import json
 from scipy.spatial import distance
@@ -392,8 +391,8 @@ class GxlFilesCreator:
             ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
 
 
-def make_gxl_dataset(coord_txt_files_folder, spacing_json, output_folder, edge_def_tb_to_l=None, edge_def_tb_to_tb=None,
-                     fully_connected=None):
+def make_gxl_dataset(coord_txt_files_folder: str, spacing_json: str, output_folder: str, edge_def_tb_to_l: str = None,
+                     edge_def_tb_to_tb: str = None, fully_connected: str = None):
     """
     INPUT
     --coord-txt-files-folder: path to the folder with the coordinates text files

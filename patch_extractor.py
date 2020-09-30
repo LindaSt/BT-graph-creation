@@ -57,8 +57,11 @@ class BTPatchExtractor:
 
     @property
     def wsi_files(self):
-        return glob.glob(os.path.join(self.file_path, f'*{self.staining}.mrxs')) if os.path.isdir(self.file_path) else [
-            self.file_path]
+        if os.path.isdir(self.file_path):
+            files = glob.glob(os.path.join(self.file_path, f'*{self.staining}.mrxs')) + glob.glob(os.path.join(self.file_path, f'*{self.staining}.ndpi'))
+            return files
+        else:
+            return [self.file_path]
 
     @property
     def coord_files(self):
@@ -71,7 +74,7 @@ class BTPatchExtractor:
             filename = os.path.splitext(os.path.basename(self.file_path))[0]
             output_folder = os.path.join(self.output_path, filename)
             # skip if overwrite = False and folder exists
-            if not self.overwrite and os.path.isfolder(output_folder):
+            if not self.overwrite and os.path.isdir(output_folder):
                 print(f'Folder {output_folder} already exists. Output saving is skipped. To overwrite add --overwrite.')
             else:
                 return [(output_folder, self.file_path, self.coord_path)]
@@ -85,7 +88,7 @@ class BTPatchExtractor:
                 filename = os.path.splitext(os.path.basename(wsi_path))[0]
                 output_folder = os.path.join(self.output_path, filename)
                 # skip if overwrite = False and folder exists
-                if not self.overwrite and os.path.isfolder(output_folder):
+                if not self.overwrite and os.path.isdir(output_folder):
                     print(
                         f'Folder {output_folder} already exists. Output saving is skipped. To overwrite add --overwrite.')
                     continue

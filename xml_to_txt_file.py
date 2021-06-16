@@ -9,6 +9,7 @@ def process_xml_files(files_to_process, output_path):
     """
     Convert the xml files into numpy text files (one for each annotation group)
     """
+    # TODO: catch cases where hotspot is mispelled or PartOfGroup was not set to hotspot
     all_annotations = {}
     existing_files = set([os.path.basename(s).split('_output')[0] for s in glob.glob(os.path.join(output_path, '*.txt'))])
 
@@ -16,31 +17,34 @@ def process_xml_files(files_to_process, output_path):
         if os.path.basename(file_path).split('_output')[0] in existing_files:
             print('File {} already exists!'.format(file_path))
         else:
-            print('Processing file {}'.format(file_path))
-            tree = ET.parse(file_path)
-            root = tree.getroot()
-            filename = os.path.basename(os.path.splitext(file_path)[0])
+            try:
+                print('Processing file {}'.format(file_path))
+                tree = ET.parse(file_path)
+                root = tree.getroot()
+                filename = os.path.basename(os.path.splitext(file_path)[0])
 
-            groups_colours = {i.attrib['Name']: i.attrib['Color'] for i in root.iter('Group')}
-            groups = ['hotspot', 'lymphocytes', 'tumorbuds', 'lymphocytesR', 'tumorbudsR']
-            annotations_elements = {g: [] for g in groups}
+                groups_colours = {i.attrib['Name']: i.attrib['Color'] for i in root.iter('Group')}
+                groups = ['hotspot', 'lymphocytes', 'tumorbuds', 'lymphocytesR', 'tumorbudsR']
+                annotations_elements = {g: [] for g in groups}
 
-            for i in root.iter('Annotation'):
-                annotations_elements[i.attrib['PartOfGroup']].append(i)
+                for i in root.iter('Annotation'):
+                    annotations_elements[i.attrib['PartOfGroup']].append(i)
 
-            annotations = {g: [] for g in groups}
-            for group, element_list in annotations_elements.items():
-                for element in element_list:
-                    if element.attrib['Type'] == 'Dot':
-                        annotations[group].append(
-                            [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')][0])
-                    else:
-                        if group in ['lymphocytes', 'tumorbuds']:
-                            group = 'rectangles_' + group
-                        annotations[group].append(
-                            [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')])
+                annotations = {g: [] for g in groups}
+                for group, element_list in annotations_elements.items():
+                    for element in element_list:
+                        if element.attrib['Type'] == 'Dot':
+                            annotations[group].append(
+                                [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')][0])
+                        else:
+                            if group in ['lymphocytes', 'tumorbuds']:
+                                group = 'rectangles_' + group
+                            annotations[group].append(
+                                [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')])
 
-            all_annotations[filename] = annotations
+                all_annotations[filename] = annotations
+            except:
+                print(f'Something went wrong with file {filename}. Skipping...')
 
     # save the annotations as numpy readable files
     for filename, annotation_dict in all_annotations.items():

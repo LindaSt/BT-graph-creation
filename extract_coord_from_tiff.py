@@ -5,6 +5,7 @@ import glob
 from scipy import ndimage
 import argparse
 import json
+import cv2
 
 # export PYTHONPATH="${PYTHONPATH}:/opt/ASAP/bin"
 
@@ -52,13 +53,11 @@ def get_obj_coords(patch, x_indx, y_indx, ratio):
     return coords
 
 
-def process_files(files_to_process, output_base_path, step_size, spacing_json_filepath=None):
+def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_indx, spacing_json_filepath=None,
+                  lymph_only=False, buds_only=False):
     """
     Processes a list of tif files with lymphocyte and tumor bud detections (from JMB)
     """
-
-    bud_indx = 3
-    lymp_indx = 9
 
     # if a spacing json file is provided load it, else create a new dict
     if spacing_json_filepath:
@@ -67,16 +66,22 @@ def process_files(files_to_process, output_base_path, step_size, spacing_json_fi
         all_spacing = {}
 
     for file in files_to_process:
-        file_name = os.path.splitext(os.path.basename(file))[0].split("_combined")[0]
-        output_file_lymp = os.path.join(output_base_path, file_name + "_coordinates_lymphocytes.txt")
-        output_file_bud = os.path.join(output_base_path, file_name + "_coordinates_tumorbuds.txt")
-        print("Processing: {}".format(file_name))
-
-        level = 1
+        if "combined" in file:
+            file_name = os.path.splitext(os.path.basename(file))[0].split("_combined")[0]
+        else:
+            file_name = f'{os.path.splitext(os.path.basename(file))[0].split(".tif")[0]}_output'
 
         # save the coordinates
         all_bud_coords = np.empty((0, 2), int)
+        output_file_bud = os.path.join(output_base_path, file_name + "_coordinates_tumorbuds.txt")
+
+        output_file_lymp = os.path.join(output_base_path, file_name + "_coordinates_lymphocytes.txt")
         all_lymph_coords = np.empty((0, 2), int)
+
+        # the annotations correspond to level 1
+        level = 1
+
+        print("Processing: {}".format(file_name))
 
         # check if the files are already present
         if not os.path.isfile(output_file_lymp) and not os.path.isfile(output_file_bud):
@@ -95,32 +100,41 @@ def process_files(files_to_process, output_base_path, step_size, spacing_json_fi
                     # get the patch
                     img_patch = get_tile(img_obj, coords_level_0, level)
                     img_patch = img_patch.squeeze()
-
+                    # print(np.unique(img_patch, return_counts=True))
                     # get the patch
-                    img_patch_0 = get_tile(img_obj, coords_level_0, 0)
-                    img_patch_0 = img_patch.squeeze()
-
-
-                    lymph_patch = np.zeros(img_patch.shape, np.uint8)
-                    lymph_patch[img_patch == lymp_indx] = 1
-
-                    bud_patch = np.zeros(img_patch.shape, np.uint8)
-                    bud_patch[img_patch == bud_indx] = 1
+                    # img_patch_0 = get_tile(img_obj, coords_level_0, 0)
+                    # img_patch_0 = img_patch.squeeze()
 
                     # get the coordinates of the center of each annotation
                     # Coordinates are additionally multiplied by 2 because TIF annotations level 0 is actually level 1 on the WSI
-                    bud_coords = get_obj_coords(bud_patch, x_indx, y_indx, ratio * 2)
-                    if bud_coords is not None:
-                        bud_coords = bud_coords
-                        all_bud_coords = np.append(all_bud_coords, bud_coords, axis=0)
 
-                    lymp_coords = get_obj_coords(lymph_patch, x_indx, y_indx, ratio * 2)
-                    if lymp_coords is not None:
-                        lymp_coords = lymp_coords
-                        all_lymph_coords = np.append(all_lymph_coords, lymp_coords, axis=0)
+                    # buds
+                    if not lymph_only:
+                        bud_patch = np.zeros(img_patch.shape, np.uint8)
+                        bud_patch[img_patch == bud_indx] = 1
+                        # do some erosions and dillations to close gaps
+                        kernel = np.ones((5, 5), np.uint8)
+                        bud_patch = cv2.erode(bud_patch, kernel, iterations=1)
+                        bud_patch = cv2.dilate(bud_patch, kernel, iterations=1)
 
-            np.savetxt(output_file_lymp, all_lymph_coords, fmt='%.3f')
-            np.savetxt(output_file_bud, all_bud_coords, fmt='%.3f')
+                        bud_coords = get_obj_coords(bud_patch, x_indx, y_indx, ratio * 2)
+                        if bud_coords is not None:
+                            bud_coords = bud_coords
+                            all_bud_coords = np.append(all_bud_coords, bud_coords, axis=0)
+
+                    # lymphocytes
+                    if not buds_only:
+                        lymph_patch = np.zeros(img_patch.shape, np.uint8)
+                        lymph_patch[img_patch == lymp_indx] = 1
+                        lymp_coords = get_obj_coords(lymph_patch, x_indx, y_indx, ratio * 2)
+                        if lymp_coords is not None:
+                            lymp_coords = lymp_coords
+                            all_lymph_coords = np.append(all_lymph_coords, lymp_coords, axis=0)
+
+            if not buds_only and len(all_lymph_coords) > 0:
+                np.savetxt(output_file_lymp, all_lymph_coords, fmt='%.3f')
+            if not lymph_only and len(all_bud_coords) > 0:
+                np.savetxt(output_file_bud, all_bud_coords, fmt='%.3f')
         else:
             print('The coordinates files {} and {} already exists'.format(output_file_lymp, output_file_bud))
 
@@ -135,9 +149,21 @@ if __name__ == '__main__':
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--window-size", type=int, default=1024)
     parser.add_argument("--spacing-json", type=str, default=None)
+    parser.add_argument("--lymph-only", action='store_true', default=False)
+    parser.add_argument("--buds-only", action='store_true', default=False)
     args = parser.parse_args()
 
     spacing_json = args.spacing_json
+
+    # set the indices for the bud and lymphocyte annotations
+    # for V1 annotations
+    # bud_indx = 3
+    # lymp_indx = 9
+    # for V1 annotations
+    bud_indx = 1
+    lymp_indx = 4
+    # for the missing lymphocyte annotations
+    # lymp_indx = 1
 
     # get a list of all the tif files to process
     tif_files = os.path.join(args.tif_files_folder, r'*.tif')
@@ -152,4 +178,5 @@ if __name__ == '__main__':
     step_size = args.window_size
 
     # read the annotations and create the coordinate files
-    process_files(files_to_process, output_base_path, step_size, spacing_json)
+    process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_indx, spacing_json,
+                  args.lymph_only, args.buds_only)

@@ -4,8 +4,11 @@ import numpy as np
 from lxml import etree as ET
 import argparse
 import re
+import shutil
+
 from coord_to_xml import create_asap_xml
 from xml_to_txt_file import process_xml_files
+
 
 def setup_output_folders(output_path):
     # set / create the output
@@ -63,7 +66,7 @@ def parse_hotspot_xml(hotspot_path, txt_output):
     for ht in hotspot_txts:
         if '_output' not in ht:
             regex = re.search('(.*)(_coordinates.*)', ht)
-            os.rename(ht, '{}_output{}'.format(regex.group(1), regex.group(2)))
+            shutil.move(ht, '{}_output{}'.format(regex.group(1), regex.group(2)))
 
     # read in the hotspot xml
     hotspots = read_hotspot_xmls(hotspot_xmls)
@@ -96,7 +99,6 @@ def check_output(txt_output, xml_output, all_hotspots):
     print(f'# hotspots: {len(hotspot_ids)} | # text files: {len(txt_files_ids)} | # xml files: {len(xml_files_ids)}')
     print(f'missing text files for hotspot(s) {missing_txt_files}')
     print(f'missing xml files for hotspot(s) {missing_xml_files}')
-
 
 
 def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots):

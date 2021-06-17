@@ -50,7 +50,7 @@ Finally, the graph-representations are saved in gxl format.
    - **Output**: Contains only the detected elements within the selection.
      - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
        for the tumor buds)
-     - Folder with xml files: one pre WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
+     - Folder with xml files: one per WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
        
 1. `create_gxl_files.py`: creates the graphs as gxl files

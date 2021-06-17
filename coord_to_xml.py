@@ -2,11 +2,11 @@ import glob
 import os
 import numpy as np
 from lxml import etree as ET
-#import xml.etree.ElementTree as ET
 import argparse
 import re
 
-#%%
+
+# %%
 def create_asap_xml(files_to_process, output_folder):
     """
     This function takes a coordinate txt file as input and creates an xml file that can be loaded in ASAP
@@ -44,7 +44,8 @@ def create_asap_xml(files_to_process, output_folder):
                         annotation_type = 'Rectangle'
                     # iterate over the list
                     for i, line in enumerate(coordinates):
-                        attrib = {'Name': 'Annotation {}'.format(i), 'PartOfGroup': group, 'Color': colours[group], 'Type': annotation_type}
+                        attrib = {'Name': 'Annotation {}'.format(i), 'PartOfGroup': group, 'Color': colours[group],
+                                  'Type': annotation_type}
                         if annotation_type == 'Dot':
                             xml_annotation = ET.SubElement(xml_annotations, 'Annotation', attrib)
                             xml_coordinates = ET.SubElement(xml_annotation, 'Coordinates')
@@ -53,7 +54,7 @@ def create_asap_xml(files_to_process, output_folder):
                         else:
                             xml_annotation = ET.SubElement(xml_annotations, 'Annotation', attrib)
                             xml_coordinates = ET.SubElement(xml_annotation, 'Coordinates')
-                            coor = [(line[i], line[i+1]) for i in range(0, len(line), 2)]
+                            coor = [(line[i], line[i + 1]) for i in range(0, len(line), 2)]
                             for j, tup in enumerate(coor):
                                 coor_attrib = {'Order': str(j), 'X': str(tup[0]), 'Y': str(tup[1])}
                                 xml_coordinate = ET.SubElement(xml_coordinates, 'Coordinate', attrib=coor_attrib)

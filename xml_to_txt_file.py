@@ -60,7 +60,7 @@ def process_xml_files(files_to_process, output_path):
                     if len(coordinates.shape) < 3:
                         to_save = coordinates
                     elif len(coordinates.shape) == 3:
-                        # reformat np array to 2D by flattening the corner coordinates to one list [tl, tr, br, bl]
+                        # reformat np array to 2D by flattening the corner coordinates to one list [bl, br, tr, tl]
                         to_save = np.empty((0, 8), float)
                         for hotspot_coord in coordinates:
                             to_save = np.append(to_save,

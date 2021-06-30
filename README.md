@@ -132,6 +132,16 @@ Finally, the graph-representations are saved in gxl format.
           and `enpoint` is the `--endpoint`.
 
 
+### Other utility scripts
+- `check-hotspot-xmls`: Checks if hotspot xml(s) have the right format and corrects them if possible 
+  (for an example of the expected structure see the script file)
+  - Input:
+    - `--input-path`: path to the xml hotspot file/folder
+    - `--output-path`: path to the folder, where the corrected xml files should be saved to
+    - `--overwrite`: overwrites existing xml files (default is False)
+  - Output:
+    - File / folder of corrected hotspot xml files
+
 ## Installation requirements
 Install the conda environment with `conda env create -f environment.yml`. 
 

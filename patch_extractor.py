@@ -9,8 +9,8 @@ import pandas as pd
 
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
-                 hotspot: bool = False, level: int = 0, matched_files_excel: str = None,
-                 lymph_patch_size: int = 300, tb_patch_size: int = 300):
+                 hotspot: bool = False, level: int = 0, lymph_patch_size: int = 300, tb_patch_size: int = 300,
+                 matched_files_excel: str = None):
         """
         This Object extracts (patches of) an mrxs file to a png format.
 
@@ -218,7 +218,6 @@ class BTPatchExtractor:
         dims = wsi_img.level_dimensions[id_level]
 
         # TODO make sure the dimension we want to crop are within the image dimensions
-
         # extract the region of interest
         img = wsi_img.read_region(top_left_coord, id_level, (size, size))
 
@@ -227,6 +226,21 @@ class BTPatchExtractor:
         img[img[:, :, 3] != 255] = 255
         return img
 
+    def parse_matched_files_excel(self):
+        df = pd.read_excel(self.matched_files_excel, sheet_name='Masterfile', engine='openpyxl')
+        # drop all rows that do not contain 0 or 1 in column "Need resection?" (excluded because no data available)
+        # df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
+        # drop all rows that do not contain a file name
+        # TODO: make this neater
+        df = df[df['Hotspot filename'].notna()]
+        df = df[df['Algo coordinates text file ID'].notna()]
+        df = df.drop(df[df['Hotspot filename'].isin(["tbd", "na"])].index)
+        df = df.drop(df[df['Algo coordinates text file ID'].isin(["tbd", "na"])].index)
+        # drop all the other columns
+        files_to_process = df[['Hotspot filename', 'Algo coordinates text file ID']]
+        return list(files_to_process.itertuples(index=False, name=None))
+
+
 if __name__ == '__main__':
-    # TODO: make this work with matched excel file
+    # TODO: make this work with matched excel file?
     fire.Fire(BTPatchExtractor).process_files()

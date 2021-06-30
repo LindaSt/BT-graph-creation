@@ -65,7 +65,7 @@ def parse_matched_files_excel(matched_files_excel):
     return list(files_to_process.itertuples(index=False, name=None))
 
 
-def check_hotspots(input_path: str, output_path: str, overwrite: bool = False, matched_files_excel: str = False):
+def check_hotspots(input_path: str, output_path: str, overwrite: bool = False, matched_files_excel: str = None):
     if not os.path.isdir(output_path):
         os.mkdir(output_path)
 
@@ -98,6 +98,7 @@ if __name__ == '__main__':
     --input-path: path to the xml hotspot file/folder
     --output-path: path to the folder, where the corrected xml files should be saved to
     --overwrite: overwrites existing xml files (default is False)
+    --matched-files-excel: excel file which matches up the hotspot names with the text file id
     """
     fire.Fire(check_hotspots)
 

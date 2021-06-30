@@ -42,10 +42,11 @@ Finally, the graph-representations are saved in gxl format.
    - **Output**:
      - Up to three text files per WSI (depending on how many annotations there are in the xml).
 
-1. `reduce-coord-to-hotspot.py`: retrieves only the elements within a certain area.
+1. `reduce_coord_to_hotspot.py`: retrieves only the elements within a certain area. It expects the hotspot files to have 
+   the same name as the matching coordinate files (run `check_hotspot_xml.py` first)
    - **Input**:
-     - `--hotspot-xmls`: folder with the xml files of the hotspots
-     - `--coordinate-txt-files`: folder with the text files of the coordinates of the lymphocytes and tumor buds
+     - `--xml-hotspot-folder`: folder with the xml files of the hotspots
+     - `--coordinate-txt-files-folder`: folder with the text files of the coordinates of the lymphocytes and tumor buds
      - `--output-folder`: folder where the output is saved to
    - **Output**: Contains only the detected elements within the selection.
      - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
@@ -71,7 +72,7 @@ Finally, the graph-representations are saved in gxl format.
        The graphs are not pre-processed (features are not normalized, x,y coordinates are not centered)!
 
 ### Convert endpoints to dataset split (cxl files)
-1. `make-endpoint-json.py`: sets up json dictionary based on an excel file
+1. `make_endpoint_json.py`: sets up json dictionary based on an excel file
    - **Input**:
      - `--output-path`: where the json files should be saved to
      - `--excel-path`: path to the excel with the data
@@ -98,7 +99,7 @@ Finally, the graph-representations are saved in gxl format.
          endpoint2: endpoint value<br />
          ...
 
-1. `endpoints-json-to-cxl.py`: splits the data from the json file into train, vaild and test cxl files. 
+1. `endpoints_json_to_cxl.py`: splits the data from the json file into train, vaild and test cxl files. 
     It is split based on the patient-id, so if your slides are very unequally distributed amongh the patients,
     you will have make sure you still have roughly the percentage split you want.
    - **Input**:
@@ -133,12 +134,15 @@ Finally, the graph-representations are saved in gxl format.
 
 
 ### Other utility scripts
-- `check-hotspot-xmls`: Checks if hotspot xml(s) have the right format and corrects them if possible 
-  (for an example of the expected structure see the script file)
+- `check_hotspot_xmls`: Checks if hotspot xml(s) have the right format and corrects them if possible 
+  (for an example of the expected structure see the script file). It also changes the filename according to the provided 
+  excel master-file to match the output text file names.
   - Input:
     - `--input-path`: path to the xml hotspot file/folder
     - `--output-path`: path to the folder, where the corrected xml files should be saved to
     - `--overwrite`: overwrites existing xml files (default is False)
+    - `--matched-files-excel`: optional (default False). If specified, the files are matched based on this excel
+      (check script to change column headers)
   - Output:
     - File / folder of corrected hotspot xml files
 

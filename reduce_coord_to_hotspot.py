@@ -5,6 +5,7 @@ from lxml import etree as ET
 import argparse
 import re
 import shutil
+import pandas as pd
 
 from coord_to_xml import create_asap_xml
 from xml_to_txt_file import process_xml_files
@@ -82,14 +83,14 @@ def create_asap_xmls(all_txt_files, xml_output):
 
 def check_output(txt_output, xml_output, all_hotspots):
     # make sure all the hotspots were processed and that there are three txt files for each hotspot
-    txt_files = [os.path.basename(f).split('_CD8')[0] for f in glob.glob(txt_output+'/*.txt')]
+    txt_files = [os.path.basename(f).split('_CD8')[0] for f in glob.glob(txt_output + '/*.txt')]
     txt_files_ids = set(txt_files)
-    xml_files_ids = set([os.path.basename(f).split('_CD8')[0] for f in glob.glob(xml_output+'/*.xml')])
+    xml_files_ids = set([os.path.basename(f).split('_CD8')[0] for f in glob.glob(xml_output + '/*.xml')])
     hotspot_ids = set([os.path.basename(f).split('_CD8')[0] for f in all_hotspots])
 
     # check that there are three files for each hotspot
     text_files_unique = np.unique(txt_files, return_counts=True)
-    not_three =', '.join([text_files_unique[0][i] for i, count in enumerate(text_files_unique[1]) if count != 3])
+    not_three = ', '.join([text_files_unique[0][i] for i, count in enumerate(text_files_unique[1]) if count != 3])
     print(f'Not three output text files for files {not_three}')
 
     # check for missing files
@@ -99,6 +100,33 @@ def check_output(txt_output, xml_output, all_hotspots):
     print(f'# hotspots: {len(hotspot_ids)} | # text files: {len(txt_files_ids)} | # xml files: {len(xml_files_ids)}')
     print(f'missing text files for hotspot(s) {missing_txt_files}')
     print(f'missing xml files for hotspot(s) {missing_xml_files}')
+
+
+def get_matched_files_excel(matched_files_excel):
+    files_to_process = []
+    df = pd.read_excel(matched_files_excel, sheet_name=MATCHED_EXCEL_INFO['sheet_name'])
+    # drop all rows that do not contain 0 or 1 in column "Need resection?" (excluded because no data available)
+    df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
+    # drop all rows that do not contain a file name
+    df = df[df[MATCHED_EXCEL_INFO['xml_col']].notna()]
+    df = df.drop(df[df[MATCHED_EXCEL_INFO['xml_col']].isin(["tbd"])].index)
+
+    for wsi_file, wsi_folder, xml_name in zip(df[MATCHED_EXCEL_INFO['wsi_col']], df[MATCHED_EXCEL_INFO['folder_col']],
+                                              df[MATCHED_EXCEL_INFO['xml_col']]):
+        # filter so that only valid ones are present (e.g. based on the exclude column)
+        filename = os.path.splitext(os.path.basename(wsi_file))[0]
+        output_file_name = os.path.join(self.output_path,
+                                        f'{filename}-level{self.level}-{self.coord_annotation_tag}')
+        # skip existing files, if overwrite = False
+        if not self.overwrite and os.path.isfile(f'{output_file_name}.png'):
+            print(
+                f'File {output_file_name} already exists. Output saving is skipped. To overwrite add --overwrite.')
+            continue
+        wsi_path = os.path.join(self.wsi_files, os.path.join(wsi_folder, wsi_file))
+        # print((output_file_name, wsi_path, xml_name))
+        files_to_process.append((output_file_name, wsi_path, os.path.join(self.xmls_path, xml_name)))
+
+    return files_to_process
 
 
 def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots):
@@ -143,20 +171,22 @@ def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, a
     check_output(txt_output, xml_output, all_hotspots.keys())
 
 
-if __name__ == '__main__':
-    # TODO: make this work with matched excel file
-    MATCHED_EXCEL_INFO = {'wsi_col': 'CD8 Filename', 'xml_col': 'Hotspot filename', 'sheet_name': 'BTS',
-                          'folder_col': 'Folder'}
+MATCHED_EXCEL_INFO = {'wsi_col': 'CD8 Filename', 'xml_col': 'Hotspot filename', 'sheet_name': 'BTS',
+                      'folder_col': 'Folder'}
 
+if __name__ == '__main__':
+    # Expects the hotspot files to have the same name as the matching coordinate files
     parser = argparse.ArgumentParser()
-    parser.add_argument("--xml-hotspots", type=str, required=True)
+    parser.add_argument("--xml-hotspot-folder", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
+    parser.add_argument("--matched-files-excel", type=str, required=False, default=False)
     args = parser.parse_args()
 
-    hotspot_path = args.xml_hotspots
+    hotspot_path = args.xml_hotspot_folder
 
     output_path = args.output_folder
+
     xml_output, txt_output = setup_output_folders(output_path)
 
     # get the hotspots (dict)

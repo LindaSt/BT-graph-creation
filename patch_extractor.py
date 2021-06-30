@@ -9,7 +9,7 @@ import pandas as pd
 
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
-                 hotspot: bool = False, level: int = 0, matched_files_excel = None,
+                 hotspot: bool = False, level: int = 0, matched_files_excel: str = None,
                  lymph_patch_size: int = 300, tb_patch_size: int = 300):
         """
         This Object extracts (patches of) an mrxs file to a png format.

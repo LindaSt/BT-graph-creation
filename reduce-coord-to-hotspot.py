@@ -144,6 +144,10 @@ def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, a
 
 
 if __name__ == '__main__':
+    # TODO: make this work with matched excel file
+    MATCHED_EXCEL_INFO = {'wsi_col': 'CD8 Filename', 'xml_col': 'Hotspot filename', 'sheet_name': 'BTS',
+                          'folder_col': 'Folder'}
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--xml-hotspots", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)

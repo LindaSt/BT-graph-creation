@@ -97,45 +97,26 @@ def check_output(txt_output, xml_output, all_hotspots):
     missing_txt_files = ', '.join(list(hotspot_ids - txt_files_ids))
     missing_xml_files = ', '.join(list(hotspot_ids - xml_files_ids))
 
-    print(f'# hotspots: {len(hotspot_ids)} | # text files: {len(txt_files_ids)} | # xml files: {len(xml_files_ids)}')
-    print(f'missing text files for hotspot(s) {missing_txt_files}')
-    print(f'missing xml files for hotspot(s) {missing_xml_files}')
+    stats = f'# hotspots: {len(hotspot_ids)} | # text files: {len(txt_files_ids)} | # xml files: {len(xml_files_ids)}'
+    missing_txt_msg = f'missing text files for hotspot(s) {missing_txt_files}'
+    missing_xml_msg = f'missing xml files for hotspot(s) {missing_xml_files}'
+
+    print(stats)
+    print(missing_txt_msg)
+    print(missing_xml_msg)
+
+    # write the files with issues to a file
+    with open(os.path.join(os.path.dirname(xml_output), "log.txt"), "w") as text_file:
+        text_file.write("\n".join([stats, missing_txt_msg, missing_xml_msg]))
 
 
-def get_matched_files_excel(matched_files_excel):
-    files_to_process = []
-    df = pd.read_excel(matched_files_excel, sheet_name=MATCHED_EXCEL_INFO['sheet_name'])
-    # drop all rows that do not contain 0 or 1 in column "Need resection?" (excluded because no data available)
-    df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
-    # drop all rows that do not contain a file name
-    df = df[df[MATCHED_EXCEL_INFO['xml_col']].notna()]
-    df = df.drop(df[df[MATCHED_EXCEL_INFO['xml_col']].isin(["tbd"])].index)
-
-    for wsi_file, wsi_folder, xml_name in zip(df[MATCHED_EXCEL_INFO['wsi_col']], df[MATCHED_EXCEL_INFO['folder_col']],
-                                              df[MATCHED_EXCEL_INFO['xml_col']]):
-        # filter so that only valid ones are present (e.g. based on the exclude column)
-        filename = os.path.splitext(os.path.basename(wsi_file))[0]
-        output_file_name = os.path.join(self.output_path,
-                                        f'{filename}-level{self.level}-{self.coord_annotation_tag}')
-        # skip existing files, if overwrite = False
-        if not self.overwrite and os.path.isfile(f'{output_file_name}.png'):
-            print(
-                f'File {output_file_name} already exists. Output saving is skipped. To overwrite add --overwrite.')
-            continue
-        wsi_path = os.path.join(self.wsi_files, os.path.join(wsi_folder, wsi_file))
-        # print((output_file_name, wsi_path, xml_name))
-        files_to_process.append((output_file_name, wsi_path, os.path.join(self.xmls_path, xml_name)))
-
-    return files_to_process
-
-
-def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots):
+def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots, overwrite=False):
     coor_txt_files_path = os.path.join(coor_txt_files_path, r'*_coordinates_*.txt')
     all_txt_files = glob.glob(coor_txt_files_path)
     txt_files_to_process = list(set([re.search(r'(.*)_output_coordinates', f).group(1) for f in all_txt_files]))
 
     output_text_files = []
-
+    error_files = []
     for file in txt_files_to_process:
         print('Processing file {}'.format(os.path.basename(file)))
         coord_in_hotspot = {}
@@ -156,14 +137,16 @@ def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, a
                         coord_in_hotspot[group] = coordinates[in_hotspot]
                         to_save = coordinates[in_hotspot]
                         output_text_files.append(output_txt_file)
-                        if not os.path.isfile(output_txt_file):
+                        if not os.path.isfile(output_txt_file) or overwrite:
                             np.savetxt(output_txt_file, to_save, fmt='%.4f')
                         else:
                             print('The coordinates file {} already exists'.format(output_txt_file))
                 else:
                     print('File {} does not exist. Continuing...'.format(file_path))
+                    error_files.append(file_path)
             else:
-                print(f'No hotspots xml for file {os.path.basename(file)}')
+                print(f'No hotspot xml for file {os.path.basename(file)}')
+                error_files.append(file)
 
     create_asap_xmls(output_text_files, xml_output)
 
@@ -180,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument("--xml-hotspot-folder", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
-    parser.add_argument("--matched-files-excel", type=str, required=False, default=False)
+    parser.add_argument("--overwrite", type=bool, required=False, default=False)
     args = parser.parse_args()
 
     hotspot_path = args.xml_hotspot_folder
@@ -195,4 +178,4 @@ if __name__ == '__main__':
     coordinate_txt_files = args.coordinate_txt_files
 
     # create the hotspot asap and txt files
-    create_hotspot_only_txt_files(coordinate_txt_files, xml_output, txt_output, hotspots)
+    create_hotspot_only_txt_files(coordinate_txt_files, xml_output, txt_output, hotspots, args.overwrite)

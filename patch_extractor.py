@@ -7,6 +7,7 @@ from PIL import Image
 from openslide import open_slide
 import pandas as pd
 
+
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
                  hotspot: bool = False, level: int = 0, lymph_patch_size: int = 300, tb_patch_size: int = 300,
@@ -47,7 +48,7 @@ class BTPatchExtractor:
 
         self.groups = ['tumorbuds', 'lymphocytes', 'hotspot'] if self.extract_hotspot else ['tumorbuds', 'lymphocytes']
 
-        self.matched_excel_info = {'wsi_col': 'CD8 Filename', 'xml_col': 'Hotspot filename', 'sheet_name': 'BTS',
+        self.matched_excel_info = {'wsi_col': 'CD8 Filename', 'file_id_col': 'Algo coordinates text file ID', 'sheet_name': 'Masterfile',
                               'folder_col': 'Folder'}
 
     @property
@@ -76,12 +77,21 @@ class BTPatchExtractor:
 
     @property
     def coord_files(self):
-        return glob.glob(os.path.join(self.coord_path, f'*{self.staining}*asap.xml')) if os.path.isdir(self.coord_path) else [self.coord_path]
+        if os.path.isdir(self.file_path):
+            # if we have a matched excel
+            if self.matched_files_excel:
+                files = self.coord_path
+            else:
+                files = glob.glob(os.path.join(self.coord_path, f'*{self.staining}*asap.xml'))
+            return files
+        # if we have just a single file
+        elif os.path.isfile(self.file_path):
+            return [self.coord_path]
 
     @property
     def files_to_process(self):
         if self.matched_files_excel:
-            return self._parse_matched_files_excel()
+            return self._get_matched_files_excel()
 
         else:
             # we only have one file to process
@@ -120,52 +130,57 @@ class BTPatchExtractor:
 
                 return files_to_process
 
-    def _parse_matched_files_excel(self):
+    def _get_matched_files_excel(self):
         files_to_process = []
-        df = pd.read_excel(self.matched_files_excel, sheet_name=self.matched_files_excel['sheet_name'])
+        df = self.parse_matched_files_excel()
+        error = []
+        for wsi_file, wsi_folder, xml_name in zip(df[self.matched_excel_info['wsi_col']],
+                                                  df[self.matched_excel_info['folder_col']],
+                                                  df[self.matched_excel_info['file_id_col']]):
 
-        for wsi_file, wsi_folder, xml_name in zip(df[self.matched_files_excel['wsi_col']],
-                                                  df[self.matched_files_excel['folder_col']],
-                                                  df[self.matched_files_excel['xml_col']]):
-            # filter so that only valid ones are present (e.g. based on the exclude column)
-            filename = os.path.splitext(os.path.basename(wsi_file))[0]
-            output_file_name = os.path.join(self.output_path,
-                                            f'{filename}-level{self.level}-{self.coord_annotation_tag}')
-            # skip existing files, if overwrite = False
-            if not self.overwrite and os.path.isfile(f'{output_file_name}.png'):
-                print(
-                    f'File {output_file_name} already exists. Output saving is skipped. To overwrite add --overwrite.')
-                continue
+            output_files_folder_path = os.path.join(self.output_path, f'{xml_name}-level{self.level}')
             wsi_path = os.path.join(self.wsi_files, os.path.join(wsi_folder, wsi_file))
-            files_to_process.append((output_file_name, wsi_path, os.path.join(self.xmls_path, xml_name)))
+            xml_coord_path = os.path.join(self.coord_files, f'{xml_name}_output_asap.xml')
+            # check if files listed in excel actually exist
+            if not os.path.isfile(wsi_path):
+                print(f'WSI {wsi_path} not found (skipping file)')
+                error.append(wsi_path)
+                continue
+            if not os.path.isfile(xml_coord_path):
+                print(f'XML {xml_coord_path} not found (skipping file)')
+                error.append(xml_coord_path)
+                continue
+
+            # skip if output foler exists if overwrite = False
+            if not self.overwrite and os.path.ispath(output_files_folder_path):
+                print(
+                    f'File {output_files_folder_path} already exists. Output saving is skipped. To overwrite add --overwrite.')
+                continue
+
+            files_to_process.append((output_files_folder_path, wsi_path, xml_coord_path))
 
         return files_to_process
 
     def process_files(self):
         # process the files with coordinates
-        if self.coord_path and ((os.path.isdir(self.file_path) and os.path.isdir(self.coord_path)) or (
-                os.path.isfile(self.file_path) and os.path.isfile(self.coord_path))):
-
-            for output_folder_path, wsi_path, coord_path in self.files_to_process:
-                # make the output folder if it does not exist
-                if not os.path.isdir(output_folder_path):
-                    os.makedirs(output_folder_path)
-                # open the wsi and get the coordinates
-                wsi_img = open_slide(wsi_path)
-                group_coordinates = self.parse_xml(coord_path)
-                # iterate over the objects
-                for group, coords in group_coordinates.items():
-                    for id, coord in coords:
-                        output_file_path = os.path.join(output_folder_path, f'{os.path.basename(output_folder_path)}-{group}-{id}.png')
-                        # extract the patch
-                        top_left_coord, size = self.get_rectangle_info(coord, group)
-                        png = self.extract_crop(wsi_img, top_left_coord, size)
-                        # save the image
-                        print(f'Saving image {output_file_path}')
-                        Image.fromarray(png[:, :, :3]).save(output_file_path)
-        else:
-            # Something went wrong
-            print('Path(s) are invalid.')
+        for output_folder_path, wsi_path, coord_path in self.files_to_process:
+            # make the output folder if it does not exist
+            if not os.path.isdir(output_folder_path):
+                os.makedirs(output_folder_path)
+            # open the wsi and get the coordinates
+            wsi_img = open_slide(wsi_path)
+            group_coordinates = self.parse_xml(coord_path)
+            # iterate over the objects
+            for group, coords in group_coordinates.items():
+                for id, coord in coords:
+                    # TODO: add coordinates to patch file
+                    output_file_path = os.path.join(output_folder_path, f'{os.path.basename(output_folder_path)}-{group}-{id}.png')
+                    # extract the patch
+                    top_left_coord, size = self.get_rectangle_info(coord, group)
+                    png = self.extract_crop(wsi_img, top_left_coord, size)
+                    # save the image
+                    print(f'Saving image {output_file_path}')
+                    Image.fromarray(png[:, :, :3]).save(output_file_path)
 
     def get_rectangle_info(self, asap_coord, group):
         if group == 'hotspot':
@@ -226,21 +241,18 @@ class BTPatchExtractor:
         img[img[:, :, 3] != 255] = 255
         return img
 
-    def parse_matched_files_excel(self):
-        df = pd.read_excel(self.matched_files_excel, sheet_name='Masterfile', engine='openpyxl')
+    def parse_matched_files_excel(self) -> pd.DataFrame:
+        df = pd.read_excel(self.matched_files_excel, sheet_name=self.matched_excel_info['sheet_name'], engine='openpyxl')
         # drop all rows that do not contain 0 or 1 in column "Need resection?" (excluded because no data available)
         # df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
         # drop all rows that do not contain a file name
         # TODO: make this neater
-        df = df[df['Hotspot filename'].notna()]
-        df = df[df['Algo coordinates text file ID'].notna()]
-        df = df.drop(df[df['Hotspot filename'].isin(["tbd", "na"])].index)
-        df = df.drop(df[df['Algo coordinates text file ID'].isin(["tbd", "na"])].index)
-        # drop all the other columns
-        files_to_process = df[['Hotspot filename', 'Algo coordinates text file ID']]
-        return list(files_to_process.itertuples(index=False, name=None))
+        df = df[df[self.matched_excel_info['wsi_col']].notna()]
+        df = df[df[self.matched_excel_info['file_id_col']].notna()]
+        df = df.drop(df[df[self.matched_excel_info['wsi_col']].isin(["tbd", "na"])].index)
+        df = df.drop(df[df[self.matched_excel_info['file_id_col']].isin(["tbd", "na"])].index)
+        return df
 
 
 if __name__ == '__main__':
-    # TODO: make this work with matched excel file?
     fire.Fire(BTPatchExtractor).process_files()

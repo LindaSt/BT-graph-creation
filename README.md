@@ -151,3 +151,6 @@ Install the conda environment with `conda env create -f environment.yml`.
 
 Additionally you need to install [ASAP](https://github.com/computationalpathologygroup/ASAP), if you want
 to use the `extract_coord_from_tiff.py` script.
+
+
+#TODO: add documentation for patch extractor

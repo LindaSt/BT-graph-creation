@@ -52,8 +52,11 @@ def check_xml(file_path):
 
 def parse_matched_files_excel(matched_files_excel):
     df = pd.read_excel(matched_files_excel, sheet_name='Masterfile', engine='openpyxl')
+    # remove two empty top lines and set third line to header
+    df.columns = df.iloc[2]
+    df = df.iloc[3:]
     # drop all rows that do not contain 0 or 1 in column "Need resection?" (excluded because no data available)
-    # df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
+    df = df.drop(df[~df["Need resection?"].isin([0, 1])].index)
     # drop all rows that do not contain a file name
     # TODO: make this neater
     df = df[df['Hotspot filename'].notna()]

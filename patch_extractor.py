@@ -6,12 +6,13 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 from openslide import open_slide
 import pandas as pd
+from multiprocessing import Process
 
 
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
                  hotspot: bool = False, level: int = 0, lymph_patch_size: int = 300, tb_patch_size: int = 300,
-                 matched_files_excel: str = None):
+                 matched_files_excel: str = None, n_threads=6):
         """
         This Object extracts (patches of) an mrxs file to a png format.
 
@@ -45,6 +46,7 @@ class BTPatchExtractor:
         self.extract_hotspot = hotspot
         self.lymph_patch_size = lymph_patch_size
         self.tb_patch_size = tb_patch_size
+        self.n_threads = n_threads
 
         self.groups = ['tumorbuds', 'lymphocytes', 'hotspot'] if self.extract_hotspot else ['tumorbuds', 'lymphocytes']
 
@@ -163,7 +165,17 @@ class BTPatchExtractor:
 
     def process_files(self):
         # process the files with coordinates
-        for output_folder_path, wsi_path, coord_path in self.files_to_process:
+        chunks = np.array_split(self.files_to_process, self.n_threads)
+        prcs = []
+        for c in chunks:
+            p = Process(target=self.process_chunk, args=(c,))
+            p.start()
+            prcs.append(p)
+        [pr.join() for pr in prcs]
+
+    def process_chunk(self, chunk):
+        for c in chunk:
+            output_folder_path, wsi_path, coord_path = tuple(c)
             # make the output folder if it does not exist
             if not os.path.isdir(output_folder_path):
                 os.makedirs(output_folder_path)
@@ -174,7 +186,8 @@ class BTPatchExtractor:
             for group, coords in group_coordinates.items():
                 for id, coord in coords:
                     # TODO: add coordinates to patch file
-                    output_file_path = os.path.join(output_folder_path, f'{os.path.basename(output_folder_path)}-{group}-{id}.png')
+                    output_file_path = os.path.join(output_folder_path,
+                                                    f'{os.path.basename(output_folder_path)}_{group}_{id}_{"-".join([str(i) for i in coord])}.png')
                     # extract the patch
                     top_left_coord, size = self.get_rectangle_info(coord, group)
                     png = self.extract_crop(wsi_img, top_left_coord, size)

@@ -3,6 +3,7 @@ import os
 import numpy as np
 import xml.etree.ElementTree as ET
 import argparse
+from util.file_parsing import parse_xml
 
 
 def process_xml_files(files_to_process, output_path):
@@ -19,30 +20,9 @@ def process_xml_files(files_to_process, output_path):
         else:
             try:
                 print('Processing file {}'.format(file_path))
-                tree = ET.parse(file_path)
-                root = tree.getroot()
                 filename = os.path.basename(os.path.splitext(file_path)[0])
 
-                groups_colours = {i.attrib['Name']: i.attrib['Color'] for i in root.iter('Group')}
-                groups = ['hotspot', 'lymphocytes', 'tumorbuds', 'lymphocytesR', 'tumorbudsR']
-                annotations_elements = {g: [] for g in groups}
-
-                for i in root.iter('Annotation'):
-                    annotations_elements[i.attrib['PartOfGroup']].append(i)
-
-                annotations = {g: [] for g in groups}
-                for group, element_list in annotations_elements.items():
-                    for element in element_list:
-                        if element.attrib['Type'] == 'Dot':
-                            annotations[group].append(
-                                [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')][0])
-                        else:
-                            if group in ['lymphocytes', 'tumorbuds']:
-                                group = 'rectangles_' + group
-                            annotations[group].append(
-                                [[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')])
-
-                all_annotations[filename] = annotations
+                all_annotations[filename] = parse_xml(file_path)
             except:
                 print(f'Something went wrong with file {filename}. Skipping...')
 

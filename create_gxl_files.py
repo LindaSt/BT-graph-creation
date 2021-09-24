@@ -8,6 +8,7 @@ from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
 import fire
 import sys
+from util.file_parsing import parse_xml
 
 
 class EdgeConfig:
@@ -82,7 +83,7 @@ class Graph:
     edge_config: EdgeConfig object
     """
 
-    def __init__(self, file_id, file_path, spacing, edge_config=None):
+    def __init__(self, file_id, file_path, spacing=None, edge_config=None):
         # print(f'Creating graph for id {file_id}.')
         self.file_path = file_path
         self.file_id = file_id
@@ -92,8 +93,15 @@ class Graph:
         self.node_feature_names = ['type', 'x', 'y']  # TODO: get this automatically?
         self.edge_feature_names = []  # will get added during self.add_edges()
 
+        # read the xml file
+        self.xml_data = parse_xml(self.file_path)
+
         # get the node dict splits
-        self.xy_tb_nodes, self.xy_lymph_nodes = self._get_split_node_dicts()
+        self.lymph_nodes = self.get_node_dict('lymphocytes', )
+        self.tb_nodes = self.get_node_dict('tumorbuds', offset=len(self.lymph_nodes.keys()))
+        self.node_dict = {**self.lymph_nodes, **self.tb_nodes}
+        self.xy_tb_nodes = {k: (v['x'], v['y']) for k, v in self.tb_nodes.items()}
+        self.xy_lymph_nodes = {k: (v['x'], v['y']) for k, v in self.lymph_nodes.items()}
 
         # set up the edges
         self.edge_config = edge_config.edge_definitions
@@ -111,51 +119,37 @@ class Graph:
 
     @spacing.setter
     def spacing(self, spacing):
-        assert spacing[0] == spacing[1]
-        self._spacing = spacing[0]
+        if spacing and len(spacing) > 1:
+            assert spacing[0] == spacing[1]
+            self._spacing = spacing[0]
+        else:
+            self._spacing = spacing
 
     @property
     def hotspot_coordinates(self) -> list:
         # get the hotspot coordinates
-        hotspot_path = f'{self.file_path}_coordinates_hotspot.txt'
-        hotspot_coordinates = np.loadtxt(hotspot_path)
-        assert len(hotspot_coordinates) == 8
-        assert isinstance(hotspot_coordinates[0], float)
-        hotspot_coordinates = [tuple([hotspot_coordinates[i], hotspot_coordinates[i + 1]]) for i in range(0, 8, 2)]
-        return hotspot_coordinates
+        return self.xml_data['hotspot'][0]
 
-    @property
-    def node_dict(self) -> dict:
+    # *********** setting up the nodes ***********
+    def get_node_dict(self, group, offset=0) -> dict:
         """
-        returns a dict with all the nodes {node_id: [node_attributes]}
+        returns a dict with all the nodes for the given group
         """
         # get all the nodes
-        node_dict = {}
-        for group in ['lymphocytes', 'tumorbuds']:
-            node_name = group[:-1]
-            # load the file
-            file_path = f'{self.file_path}_coordinates_{group}.txt'
+        node_name = group[:-1]
+        lines = [self._convert_coord(c) for c in self.xml_data[group]]
+        node_d = {i+offset: {'type': node_name, 'x': line[0], 'y': line[1]}
+                  for i, line in enumerate(lines)}
+        return node_d
 
-            if os.path.isfile(file_path):
-                coordinates = np.loadtxt(file_path)
-                # check if file actually contains coordinates
-                if len(coordinates) > 0:
-                    # Make the annotations and coordinates
-                    if len(coordinates.shape) == 1:
-                        coordinates = coordinates.reshape((1, 2))
-
-                    assert coordinates.shape[1] == 2
-
-                    # multiply by spacing to get the actual coordinates in mikro-meters
-                    for i, line in enumerate(coordinates):
-                        # adjust x and y to make relative to the hot-spot coordinates.
-                        line -= np.array(self.hotspot_coordinates[0])
-                        assert min(line) >= 0
-                        node_dict[i] = {'type': node_name, 'x': line[0] * self.spacing, 'y': line[1] * self.spacing}
-            else:
-                print(f'File {file_path} not found. Continuing...')
-
-        return node_dict
+    def _convert_coord(self, coordinates):
+        assert len(coordinates) == 2
+        # adjust x and y to make relative to the hot-spot coordinates.
+        coord = np.array([coordinates[i] - self.hotspot_coordinates[0][i] for i in [0,1]])
+        assert min(coord) >= 0
+        if self.spacing:
+            coord *= self.spacing
+        return coord
 
     # *********** adding edges ***********
     def add_edges(self):
@@ -256,7 +250,7 @@ class Graph:
 
         # only insert edges if we have elements in the lists
         if len(training_set) > 0 and len(test_set) > 0:
-            neigh = NearestNeighbors(k, metric=distance_metric)
+            neigh = NearestNeighbors(n_neighbors=k, metric=distance_metric)
             neigh.fit(training_set)
             # if we are compare the same two sets, the first match will always be the point itself --> k += 1
             if training_set == test_set:
@@ -332,29 +326,13 @@ class Graph:
         # e = ET.dump(xml_tree)
         return xml_tree
 
-    # *********** helper functions ***********
-    def _get_split_node_dicts(self) -> tuple:
-        # splits the nodes dict into the two classes
-        all_buds = {}
-        all_lymphs = {}
-        for node_id, node_attrib in self.node_dict.items():
-            type = node_attrib['type']
-            x = node_attrib['x']
-            y = node_attrib['y']
-            if type == 'tumorbud':
-                all_buds[node_id] = (x, y)
-            if type == 'lymphocyte':
-                all_lymphs[node_id] = (x, y)
-
-        return all_buds, all_lymphs
-
 
 class GxlFilesCreator:
     """
     Creates the xml trees from the text files with the coordinates
     """
 
-    def __init__(self, files_to_process, spacings, edge_config, normalize=False):
+    def __init__(self, files_to_process, edge_config, spacings=None, normalize=False):
         """
         files_to_process: list of paths to the files that should be processed
         spacings: dictionary that contains the spacing for each WSI (read from the spacing.json)
@@ -368,8 +346,13 @@ class GxlFilesCreator:
     @property
     def graphs(self) -> list:
         files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process}  # get rid of '_output' at the end
-        return [Graph(file_id, files_path, self.spacings[file_id], self.edge_config) for file_id, files_path in
-                files_dict.items()]
+        if self.spacings:
+            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id], edge_config=self.edge_config)
+                    for file_id, files_path in files_dict.items()]
+        else:
+            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
+                    for file_id, files_path in files_dict.items()]
+
 
     @property
     def gxl_trees(self) -> dict:
@@ -386,48 +369,57 @@ class GxlFilesCreator:
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
         for file_path in self.files_to_process:
-            file_id = os.path.basename(file_path)[:-7]
-            graph = Graph(file_id, file_path, self.spacings[file_id], self.edge_config)
-            ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
+            file_id = os.path.basename(file_path)[:-9]  # remove "_asap.xml" to match it to spacing json
+            try:
+                spacing = self.spacings[file_id] if self.spacings else None
+                graph = Graph(file_id=file_id, file_path=file_path, edge_config=self.edge_config, spacing=spacing)
+                # graph = Graph(file_id, file_path, self.spacings[file_id], self.edge_config)
+                ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
+            except KeyError:
+                print(f'No spacing found for {file_path} in spacing.json. Skipping file')
+                continue
 
 
-def make_gxl_dataset(coord_txt_files_folder: str, spacing_json: str, output_folder: str, edge_def_tb_to_l: str = None,
-                     edge_def_tb_to_tb: str = None, fully_connected: str = None):
+def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
+                     edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,):
     """
     INPUT
-    --coord-txt-files-folder: path to the folder with the coordinates text files
-    --spacing-json: Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
+    --asap-xml-files-folder: path to the folder with the coordinates text files
     --edge-def-tb-to-l (optional):
       - radius-x: connect elements in radius X (in mikrometer)
       - to-X-nn: connect to k closest elements where X is the number of neighbours
     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
+    --spacing-json: (optional) Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
     --output-folder: path to where output folder should be created
 
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
-    The distances are centered (xy - xy(average)).
+    TODO: remove this: The distances are centered (xy - xy(average)).?
     """
     # get the edge definitions
     edge_def_config = EdgeConfig(edge_def_tb_to_l, edge_def_tb_to_tb, fully_connected)
 
     # read the spacing json
-    spacing_json = r'{}'.format(spacing_json)
-    with open(spacing_json) as data_file:
-        spacings = json.load(data_file)
+    if spacing_json:
+        spacing_json = r'{}'.format(spacing_json)
+        with open(spacing_json) as data_file:
+            spacings = json.load(data_file)
+    else:
+        spacings = None
 
-    # get a list of all the txt files to process
-    if not os.path.isdir(coord_txt_files_folder):
-        print(f'Folder {coord_txt_files_folder} does not exist. Exiting...')
+    # get a list of all the xml files to process
+    if not os.path.isdir(asap_xml_files_folder):
+        print(f'Folder {asap_xml_files_folder} does not exist. Exiting...')
         sys.exit(-1)
-    all_files = glob.glob(os.path.join(coord_txt_files_folder, '*coordinates*.txt'))
-    files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
+    files_to_process = glob.glob(os.path.join(asap_xml_files_folder, '*.xml'))
+    # files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
     if len(files_to_process) == 0:
         print(f'No files found to process! Exiting...')
         sys.exit(-1)
 
     # Create the gxl files
-    gxl_files = GxlFilesCreator(files_to_process, spacings, edge_def_config)
+    gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config)
 
     # save the gxl files
     gxl_files.save(output_folder)

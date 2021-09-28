@@ -53,7 +53,9 @@ Finally, the graph-representations are saved in gxl format.
        for the tumor buds)
      - Folder with xml files: one per WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
-       
+    
+#TODO: Update
+(works not with xml, spacing default 0.242797397769517 (level 0 for the used scanner)   
 1. `create_gxl_files.py`: creates the graphs as gxl files
    - **Input**:
      - `--coordinates-txt-files-folder`: path to the folder with the coordinates text files

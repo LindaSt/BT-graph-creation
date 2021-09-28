@@ -87,7 +87,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_
         if not os.path.isfile(output_file_lymp) and not os.path.isfile(output_file_bud):
             img_obj = mir.MultiResolutionImageReader().open(file)
             assert file_name not in all_spacing
-            all_spacing[file_name] = img_obj.getSpacing()
+            all_spacing[file_name] = img_obj.getSpacing()[0]
             dim_x, dim_y = img_obj.getLevelDimensions(level)
 
             # sliding window over the whole image

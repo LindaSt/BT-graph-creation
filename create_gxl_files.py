@@ -83,7 +83,7 @@ class Graph:
     edge_config: EdgeConfig object
     """
 
-    def __init__(self, file_id, file_path, spacing=None, edge_config=None):
+    def __init__(self, file_id, file_path, spacing=0.242797397769517, edge_config=None):
         # print(f'Creating graph for id {file_id}.')
         self.file_path = file_path
         self.file_id = file_id
@@ -112,18 +112,6 @@ class Graph:
     @property
     def xy_all_nodes(self) -> dict:
         return {node_id: (node_attrib['x'], node_attrib['y']) for node_id, node_attrib in self.node_dict.items()}
-
-    @property
-    def spacing(self) -> float:
-        return self._spacing
-
-    @spacing.setter
-    def spacing(self, spacing):
-        if spacing and len(spacing) > 1:
-            assert spacing[0] == spacing[1]
-            self._spacing = spacing[0]
-        else:
-            self._spacing = spacing
 
     @property
     def hotspot_coordinates(self) -> list:
@@ -342,17 +330,7 @@ class GxlFilesCreator:
         self.edge_config = edge_config
         self.spacings = spacings
         self.normalize = normalize
-
-    @property
-    def graphs(self) -> list:
-        files_dict = {os.path.basename(f)[:-7]: f for f in self.files_to_process}  # get rid of '_output' at the end
-        if self.spacings:
-            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id], edge_config=self.edge_config)
-                    for file_id, files_path in files_dict.items()]
-        else:
-            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
-                    for file_id, files_path in files_dict.items()]
-
+        self.graphs = self.get_graphs()
 
     @property
     def gxl_trees(self) -> dict:
@@ -361,23 +339,28 @@ class GxlFilesCreator:
         """
         return {graph.file_id: graph.get_gxl() for graph in self.graphs}
 
+    def get_graphs(self) -> list:
+        # TODO: multi-process?
+        files_dict = {os.path.basename(f)[:-16]: f for f in self.files_to_process}  # get rid of '_output_asap' at the end
+        if self.spacings:
+            # TODO: make sure it does not crash if file_id is not found in spacings
+            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id], edge_config=self.edge_config)
+                    for file_id, files_path in files_dict.items()]
+        else:
+            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
+                    for file_id, files_path in files_dict.items()]
+
     def save(self, output_folder):
         # create output folder if it does not exist
-        output_path = os.path.join(output_folder, str(self.edge_config))
+        subfolder = str(self.edge_config) if self.edge_config else 'no_edges'
+        output_path = os.path.join(output_folder, subfolder)
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
-        for file_path in self.files_to_process:
-            file_id = os.path.basename(file_path)[:-9]  # remove "_asap.xml" to match it to spacing json
-            try:
-                spacing = self.spacings[file_id] if self.spacings else None
-                graph = Graph(file_id=file_id, file_path=file_path, edge_config=self.edge_config, spacing=spacing)
-                # graph = Graph(file_id, file_path, self.spacings[file_id], self.edge_config)
-                ET.ElementTree(graph.get_gxl()).write(os.path.join(output_path, file_id + '.gxl'), pretty_print=True)
-            except KeyError:
-                print(f'No spacing found for {file_path} in spacing.json. Skipping file')
-                continue
+        for file_id, xml_tree in self.gxl_trees.items():
+            with open(os.path.join(output_path, file_id + '.gxl'), 'wb') as f:
+                f.write(ET.tostring(xml_tree, pretty_print=True))
 
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
@@ -406,7 +389,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
         with open(spacing_json) as data_file:
             spacings = json.load(data_file)
     else:
-        spacings = None
+        spacings = None  # spacing of 0.242797397769517 will be used (default in Graph())
 
     # get a list of all the xml files to process
     if not os.path.isdir(asap_xml_files_folder):

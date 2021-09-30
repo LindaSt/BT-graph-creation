@@ -165,7 +165,7 @@ class Graph:
             edge_id_str = '_'.join(edge_id)
             # if the edge already exists, just add the edge features
             if edge_id_str in self.edge_dict.keys():
-                assert feature_name not in self.edge_dict[edge_id_str]  # fix this for tb to tb
+                assert feature_name not in self.edge_dict[edge_id_str]
                 self.edge_dict[edge_id_str][feature_name] = feature
             # if the edge does not exist, add it plus the feature
             else:
@@ -191,61 +191,66 @@ class Graph:
         self.fully_connect(node_dict[params])
 
     def fully_connect(self, node_dict):
+        # TODO: speed this up
         # calculate the distances
-        coo_matrix = []
-        edge_features = []
+        features_dict = {}
 
         dict_ids = list(node_dict.keys())
-        for i in range(len(node_dict)):
-            for j in range(i + 1, len(node_dict)):
-                n1 = node_dict[dict_ids[i]]
-                n2 = node_dict[dict_ids[j]]
-                d = distance.euclidean(n1, n2)
-                coo_matrix.append([dict_ids[i], dict_ids[j]])
-                edge_features.append(d)
+        # for i in range(len(node_dict)):
+        #     for j in range(i + 1, len(node_dict)):
+        #         n1 = node_dict[dict_ids[i]]
+        #         n2 = node_dict[dict_ids[j]]
+        #         d = distance.euclidean(n1, n2)
+        #         edge = tuple(sorted([dict_ids[i], dict_ids[j]]))
+        #         features_dict[edge] = d
+        features_dict = {tuple(sorted([dict_ids[i], dict_ids[j]])): distance.euclidean(node_dict[dict_ids[i]], node_dict[dict_ids[j]]) for i in range(len(node_dict)) for j in range(i + 1, len(node_dict))}
         # update the dictionary
-        self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
 
     def radius(self, center_dict, perimeter_dict, x):
         assert len(x) == 1
         x = x.pop()
+        features_dict = {}
         # calculate the distances
-        coo_matrix = []
-        edge_features = []
-
         if len(center_dict) > 0 and len(perimeter_dict) > 0:
             for id_c, xy_c in center_dict.items():
                 for id_p, xy_p in perimeter_dict.items():
+                    # we don't want self loops
+                    if id_c == id_p:
+                        continue
                     d = distance.euclidean(xy_c, xy_p)
                     # if d < x add edge
-                    if d <= x:
-                        coo_matrix.append([id_c, id_p])
-                        edge_features.append(d)
+                    if 0 < d <= x:
+                        edge = tuple(sorted([id_c, id_p]))
+                        if edge not in features_dict.keys():
+                            features_dict[edge] = d
+
         # update the dictionary
-        self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
 
     def kNN(self, center_dict, perimeter_dict, k, distance_metric='euclidean'):
         assert len(k) == 1
-        k = orig_k = k.pop()
-        # calculate the distances
-        coo_matrix = []
-        edge_features = []
+
         # set-up in format for NearestNeighbors
         perimeter_keys = sorted(perimeter_dict.keys())
         center_keys = sorted(center_dict.keys())
         training_set = [perimeter_dict[i] for i in perimeter_keys]
         test_set = [center_dict[i] for i in center_keys]
 
+        # set up k
+        k = orig_k = k.pop()
+        # if we are compare the same two sets, the first match will always be the point itself --> k += 1
+        if training_set == test_set:
+            k += 1
+        # if #samples > k, set k to number of samples
+        if k > len(training_set):
+            k = len(training_set)
+
+        features_dict = {}
         # only insert edges if we have elements in the lists
         if len(training_set) > 0 and len(test_set) > 0:
             neigh = NearestNeighbors(n_neighbors=k, metric=distance_metric)
             neigh.fit(training_set)
-            # if we are compare the same two sets, the first match will always be the point itself --> k += 1
-            if training_set == test_set:
-                k += 1
-            # if #samples > k, set k to number of samples
-            if k > len(training_set):
-                k = len(training_set)
 
             distances_list, match_list = neigh.kneighbors(test_set, k, return_distance=True)
             for ind1, (indices, distances) in enumerate(zip(match_list, distances_list)):
@@ -254,12 +259,12 @@ class Graph:
                     # get the actual node ids
                     node_ind1 = center_keys[ind1]
                     node_ind2 = perimeter_keys[ind2]
-                    if node_ind1 != node_ind2 and sorted([node_ind1, node_ind2]) not in coo_matrix:
-                        coo_matrix.append(sorted([node_ind1, node_ind2]))
-                        edge_features.append(d)
+                    edge = tuple(sorted([node_ind1, node_ind2]))
+                    if node_ind1 != node_ind2 and edge not in features_dict.keys():
+                        features_dict[edge] = d
 
         # update the dictionary
-        self.update_edge_dict(coo_matrix, edge_features, feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
 
     # *********** gxl creation ***********
     def sanity_check(self):

@@ -28,6 +28,10 @@ class BTPatchExtractor:
             overides exisiting extracted patches (default is False)
         :param hotspot: bool (optional)
             set if hotspot should also be extracted (default False)
+        :param lymph_patch_size: int (optional)
+            size of the patch around the lymphocyte coordinates
+        :param tb_patch_size: int (optional)
+            size of the patch around the tumor bud coordinates
         :param level: int (optional)
             Level of the mrxs file that should be used for the conversion (default is 0).
         :param matched_files_excel: str

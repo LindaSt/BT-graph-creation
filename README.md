@@ -53,14 +53,13 @@ Finally, the graph-representations are saved in gxl format.
        for the tumor buds)
      - Folder with xml files: one per WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
-    
-#TODO: Update
-(works not with xml, spacing default 0.242797397769517 (level 0 for the used scanner)   
+       
 1. `create_gxl_files.py`: creates the graphs as gxl files
    - **Input**:
-     - `--coordinates-txt-files-folder`: path to the folder with the coordinates text files
-     - `--spacing-json`: Path to json file that contains the spacing for each whole slide image. 
-     It is needed to compute the distance between elements.
+     - `--asap_xml_files_folder`: path to the folder with the coordinates text files
+     - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image. 
+     It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0 
+       for the slide scanner used in this project)
      - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 
        - `radius-x`: connect elements in radius X (in mikrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
@@ -68,10 +67,29 @@ Finally, the graph-representations are saved in gxl format.
        - `all`: fully connected graph
        - `lymphocytes`: only the lymphocytes are fully connected
        - `tumorbuds`: only the tumorbuds are fully connected
-     - `--output-folder`: path to where output folder should be created
+       - `--output-folder`: path to where output folder should be created
    - **Output**: 
-     - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse).
+     - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files 
+       from the IAM Graph Databse). The x,y coordinates and edge distance labels are in mikro-meter.
        The graphs are not pre-processed (features are not normalized, x,y coordinates are not centered)!
+
+### Extract image-based features
+1. `patch_extractor.py`: let's you extract patches from a single mrxs file or a folder based on annotations in
+an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumorbuds` and `hotspot`).
+    - **Input**:
+        - `file_path`: path to the mrxs single file or folder of files. 
+        - `output_path`: path to the output folder. The output format is the same name as the mrxs file, with an appendix if multiple patches are extracted.
+        - `asap_xml_path`: Path to the coordinate xml files (created with ASAP) single file or folder of files
+        - `overwrite`: optional. Overides exisiting extracted patches (default is False)
+        - `hotspot`: optional. Set if hotspot should also be extracted (default False)
+        - `lymph_patch_size`: optional. Size of the patch around the lymphocyte coordinates in pixels (default is 300))
+        - `tb_patch_size`: optional. Size of the patch around the tumorbud coordinates in pixels (default is 300))
+        - `level`: optional. Level of the mrxs file that should be used for the conversion (default is 0).
+        - `matched_files_excel`: optional. If provided, then this file will be used to match the xmls to the mrxs file names
+            (specify info in MATCHED_EXEL_INFO)
+    - **Output**:
+        - Folder with one sub-folder per mrxs file containing the corresponding cropped patches.
+
 
 ### Convert endpoints to dataset split (cxl files)
 1. `make_endpoint_json.py`: sets up json dictionary based on an excel file
@@ -153,6 +171,3 @@ Install the conda environment with `conda env create -f environment.yml`.
 
 Additionally you need to install [ASAP](https://github.com/computationalpathologygroup/ASAP), if you want
 to use the `extract_coord_from_tiff.py` script.
-
-
-#TODO: add documentation for patch extractor

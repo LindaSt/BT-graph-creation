@@ -191,7 +191,6 @@ class Graph:
         self.fully_connect(node_dict[params])
 
     def fully_connect(self, node_dict):
-        # TODO: speed this up
         # calculate the distances
         features_dict = {}
 

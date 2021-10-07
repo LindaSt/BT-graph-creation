@@ -1,13 +1,16 @@
 import glob
 import os
 import numpy as np
+import fire
+import sys
+import pandas as pd
 from lxml import etree as ET
 import re
 import json
+
 from scipy.spatial import distance
 from sklearn.neighbors import NearestNeighbors
-import fire
-import sys
+
 from util.file_parsing import parse_xml
 
 
@@ -83,23 +86,27 @@ class Graph:
     edge_config: EdgeConfig object
     """
 
-    def __init__(self, file_id, file_path, spacing=0.242797397769517, edge_config=None):
+    def __init__(self, file_id: str, file_path: str, spacing: float = 0.242797397769517, edge_config: EdgeConfig = None,
+                 csv_path: str = None):
         # print(f'Creating graph for id {file_id}.')
         self.file_path = file_path
         self.file_id = file_id
         self.spacing = spacing
+        self.node_feature_csv = csv_path
 
         # set the feature names
-        self.node_feature_names = ['type', 'x', 'y']  # TODO: get this automatically?
+        # self.node_feature_names = ['type', 'x', 'y']  # TODO: get this automatically?
+        # if self.node_feature_csv is not None:
+        #     self.node_feature_names = ['type', 'x', 'y']
         self.edge_feature_names = []  # will get added during self.add_edges()
 
         # read the xml file
         self.xml_data = parse_xml(self.file_path)
 
         # get the node dict splits
-        self.lymph_nodes = self.get_node_dict('lymphocytes', )
-        self.tb_nodes = self.get_node_dict('tumorbuds', offset=len(self.lymph_nodes.keys()))
-        self.node_dict = {**self.lymph_nodes, **self.tb_nodes}
+        self.lymph_nodes = self.get_group_node_dict('lymphocytes', )
+        self.tb_nodes = self.get_group_node_dict('tumorbuds', offset=len(self.lymph_nodes.keys()))
+        self.node_dict = self.get_node_dict()
         self.xy_tb_nodes = {k: (v['x'], v['y']) for k, v in self.tb_nodes.items()}
         self.xy_lymph_nodes = {k: (v['x'], v['y']) for k, v in self.lymph_nodes.items()}
 
@@ -110,6 +117,18 @@ class Graph:
 
     # *********** properties ***********
     @property
+    def node_feature_csv(self) -> dict:
+        return self._node_feature_csv
+
+    @node_feature_csv.setter
+    def node_feature_csv(self, csv_path):
+        if csv_path:
+            df = pd.read_csv(csv_path, index_col=0).drop('filename', axis=1)
+            self._node_feature_csv = pd.DataFrame.to_dict(df, orient='index')
+        else:
+            self._node_feature_csv = None
+
+    @property
     def xy_all_nodes(self) -> dict:
         return {node_id: (node_attrib['x'], node_attrib['y']) for node_id, node_attrib in self.node_dict.items()}
 
@@ -119,25 +138,32 @@ class Graph:
         return self.xml_data['hotspot'][0]
 
     # *********** setting up the nodes ***********
-    def get_node_dict(self, group, offset=0) -> dict:
+    def get_group_node_dict(self, group, offset=0) -> dict:
         """
         returns a dict with all the nodes for the given group
         """
         # get all the nodes
         node_name = group[:-1]
         lines = [self._convert_coord(c) for c in self.xml_data[group]]
-        node_d = {i+offset: {'type': node_name, 'x': line[0], 'y': line[1]}
+        node_d = {i + offset: {'type': node_name, 'x': line[0], 'y': line[1]}
                   for i, line in enumerate(lines)}
         return node_d
 
     def _convert_coord(self, coordinates):
         assert len(coordinates) == 2
         # adjust x and y to make relative to the hot-spot coordinates.
-        coord = np.array([coordinates[i] - self.hotspot_coordinates[0][i] for i in [0,1]])
+        coord = np.array([coordinates[i] - self.hotspot_coordinates[0][i] for i in [0, 1]])
         assert min(coord) >= 0
         if self.spacing:
             coord *= self.spacing
         return coord
+
+    def get_node_dict(self):
+        # add the node features from the csv file, if present
+        node_dict = {**self.lymph_nodes, **self.tb_nodes}
+        if self.node_feature_csv is not None:
+            node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in node_dict.items()}
+        return node_dict
 
     # *********** adding edges ***********
     def add_edges(self):
@@ -202,9 +228,12 @@ class Graph:
         #         d = distance.euclidean(n1, n2)
         #         edge = tuple(sorted([dict_ids[i], dict_ids[j]]))
         #         features_dict[edge] = d
-        features_dict = {tuple(sorted([dict_ids[i], dict_ids[j]])): distance.euclidean(node_dict[dict_ids[i]], node_dict[dict_ids[j]]) for i in range(len(node_dict)) for j in range(i + 1, len(node_dict))}
+        features_dict = {tuple(sorted([dict_ids[i], dict_ids[j]])): distance.euclidean(node_dict[dict_ids[i]],
+                                                                                       node_dict[dict_ids[j]]) for i in
+                         range(len(node_dict)) for j in range(i + 1, len(node_dict))}
         # update the dictionary
-        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
+                              feature_name='distance')
 
     def radius(self, center_dict, perimeter_dict, x):
         assert len(x) == 1
@@ -225,7 +254,8 @@ class Graph:
                             features_dict[edge] = d
 
         # update the dictionary
-        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
+                              feature_name='distance')
 
     def kNN(self, center_dict, perimeter_dict, k, distance_metric='euclidean'):
         assert len(k) == 1
@@ -263,7 +293,8 @@ class Graph:
                         features_dict[edge] = d
 
         # update the dictionary
-        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(), feature_name='distance')
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
+                              feature_name='distance')
 
     # *********** gxl creation ***********
     def sanity_check(self):
@@ -324,16 +355,21 @@ class GxlFilesCreator:
     Creates the xml trees from the text files with the coordinates
     """
 
-    def __init__(self, files_to_process, edge_config, spacings=None, normalize=False):
+    def __init__(self, files_to_process: list, edge_config: EdgeConfig, spacings: dict = None, normalize: bool = False,
+                 node_feature_csvs: str = None):
         """
         files_to_process: list of paths to the files that should be processed
         spacings: dictionary that contains the spacing for each WSI (read from the spacing.json)
         edge_config: EdgeConfig object
+        node_feature_csvs: path to folder with csv files with additional node features (e.g. ImageNet features)
         """
         self.files_to_process = files_to_process
         self.edge_config = edge_config
         self.spacings = spacings
         self.normalize = normalize
+        self.matched_csv = node_feature_csvs
+        self.invalid_files = []
+
         self.graphs = self.get_graphs()
 
     @property
@@ -343,15 +379,50 @@ class GxlFilesCreator:
         """
         return {graph.file_id: graph.get_gxl() for graph in self.graphs}
 
+    @property
+    def matched_csv(self) -> dict:
+        return self._matched_csv
+
+    @matched_csv.setter
+    def matched_csv(self, node_feature_csvs):
+        self._matched_csv = None
+        if node_feature_csvs:
+            file_ids = [os.path.basename(f).split('_output')[0] for f in self.files_to_process]
+            self._matched_csv = {file_id: csv for file_id in file_ids for csv in node_feature_csvs if file_id in csv}
+
+    def check_files(self):
+        # remove files that don't have a matching spacing and csv entry from self.files_to_process, and vice versa
+        file_ids_process = [os.path.basename(f).split('_output')[0] for f in self.files_to_process]
+        common_ids = set(file_ids_process)
+        if self.matched_csv is not None:
+            common_ids = self._match_and_diff(set(self.matched_csv.keys()), common_ids)
+        if self.spacings is not None:
+            common_ids = self._match_and_diff(set(self.spacings.keys()), common_ids)
+        # update the lists/dictionaries
+        self.files_to_process = [f for f in self.files_to_process if
+                                 os.path.basename(f).split('_output')[0] in common_ids]
+        if self.matched_csv is not None:
+            self._matched_csv = {file_id: csv for file_id, csv in self.matched_csv.items() if file_id in common_ids}
+        if self.spacings is not None:
+            self.spacings = {file_id: spacing for file_id, spacing in self.spacings.items() if file_id in common_ids}
+
+    def _match_and_diff(self, set1, set2) -> set:
+        common_ids_csv_process = set1 & set2
+        self.invalid_files += sorted(list(set(set1).symmetric_difference(set(set2))))
+        return common_ids_csv_process
+
     def get_graphs(self) -> list:
         # TODO: multi-process?
-        files_dict = {os.path.basename(f)[:-16]: f for f in self.files_to_process}  # get rid of '_output_asap' at the end
+        self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
+        files_dict = {os.path.basename(f)[:-16]: f for f in
+                      self.files_to_process}  # get rid of '_output_asap' at the end
         if self.spacings:
-            # TODO: make sure it does not crash if file_id is not found in spacings
-            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id], edge_config=self.edge_config)
+            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id],
+                          edge_config=self.edge_config, csv_path=self.matched_csv[file_id])
                     for file_id, files_path in files_dict.items()]
         else:
-            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
+            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config,
+                          csv_path=self.matched_csv[file_id])
                     for file_id, files_path in files_dict.items()]
 
     def save(self, output_folder):
@@ -366,9 +437,14 @@ class GxlFilesCreator:
             with open(os.path.join(output_path, file_id + '.gxl'), 'wb') as f:
                 f.write(ET.tostring(xml_tree, pretty_print=True))
 
+        # Save the files where we had a missing spacing, xml or csv file (if present)
+        with open(os.path.join(output_folder, 'invalid_file_ids.txt'), 'w') as f:
+            f.write('\n'.join(sorted(self.invalid_files)))
+
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
-                     edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,):
+                     edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,
+                     node_feature_csvs: str = None):
     """
     INPUT
     --asap-xml-files-folder: path to the folder with the coordinates text files
@@ -379,6 +455,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
     --spacing-json: (optional) Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
     --output-folder: path to where output folder should be created
+    --node-feature-csvs: path to folder with csv files with additional node features (e.g. ImageNet features)
 
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
@@ -405,11 +482,17 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
         print(f'No files found to process! Exiting...')
         sys.exit(-1)
 
+    # get a list of the csv files
+    node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
+
     # Create the gxl files
-    gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config)
+    gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
+                                node_feature_csvs=node_feature_csvs)
 
     # save the gxl files
     gxl_files.save(output_folder)
+
+    # TODO: update ReadMe with csv file information
 
 
 if __name__ == '__main__':

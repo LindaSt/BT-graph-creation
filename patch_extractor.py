@@ -12,7 +12,7 @@ from multiprocessing import Process
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
                  hotspot: bool = False, level: int = 0, lymph_patch_size: int = 300, tb_patch_size: int = 300,
-                 matched_files_excel: str = None, n_threads=6):
+                 matched_files_excel: str = None, n_threads: int = 6, no_multi_thread: bool = False):
         """
         This Object extracts (patches of) an mrxs file to a png format.
 
@@ -56,6 +56,8 @@ class BTPatchExtractor:
 
         self.matched_excel_info = {'wsi_col': 'CD8 Filename', 'file_id_col': 'Algo coordinates text file ID', 'sheet_name': 'Masterfile',
                               'folder_col': 'Folder'}
+
+        self.no_multi_thread = no_multi_thread
 
     @property
     def output_path(self):
@@ -168,36 +170,46 @@ class BTPatchExtractor:
         return files_to_process
 
     def process_files(self):
-        # process the files with coordinates
-        chunks = np.array_split(self.files_to_process, self.n_threads)
-        prcs = []
-        for c in chunks:
-            p = Process(target=self.process_chunk, args=(c,))
-            p.start()
-            prcs.append(p)
-        [pr.join() for pr in prcs]
+        if self.no_multi_thread:
+            for (output_folder_path, wsi_path, coord_path) in self.files_to_process:
+                self.process_file(output_folder_path, wsi_path, coord_path)
+        else:
+            # process the files with coordinates
+            chunks = np.array_split(self.files_to_process, self.n_threads)
+            prcs = []
+            for c in chunks:
+                p = Process(target=self.process_chunk, args=(c,))
+                p.start()
+                prcs.append(p)
+            [pr.join() for pr in prcs]
 
     def process_chunk(self, chunk):
         for c in chunk:
             output_folder_path, wsi_path, coord_path = tuple(c)
-            # make the output folder if it does not exist
-            if not os.path.isdir(output_folder_path):
-                os.makedirs(output_folder_path)
-            # open the wsi and get the coordinates
-            wsi_img = open_slide(wsi_path)
-            group_coordinates = self.parse_xml(coord_path)
-            # iterate over the objects
-            for group, coords in group_coordinates.items():
-                for id, coord in coords:
-                    # TODO: add coordinates to patch file
-                    output_file_path = os.path.join(output_folder_path,
-                                                    f'{os.path.basename(output_folder_path)}_{group}_{id}_{"-".join([str(i) for i in coord])}.png')
-                    # extract the patch
-                    top_left_coord, size = self.get_rectangle_info(coord, group)
-                    png = self.extract_crop(wsi_img, top_left_coord, size)
-                    # save the image
-                    print(f'Saving image {output_file_path}')
-                    Image.fromarray(png[:, :, :3]).save(output_file_path)
+            self.process_file(output_folder_path, wsi_path, coord_path)
+
+    def process_file(self, output_folder_path, wsi_path, coord_path):
+        # make the output folder if it does not exist
+        if not os.path.isdir(output_folder_path):
+            os.makedirs(output_folder_path)
+        # open the wsi and get the coordinates
+        wsi_img = open_slide(wsi_path)
+        group_coordinates = self.parse_xml(coord_path)
+        # iterate over the objects
+        offset_tb = len(group_coordinates['lymphocytes'])
+        for group, coords in group_coordinates.items():
+            for id, coord in coords:
+                # to ensure that enumeration is continous (in ASAP xml it starts at 0 for each group)
+                if group == 'tumorbuds':
+                    id += offset_tb
+                output_file_path = os.path.join(output_folder_path,
+                                                f'{os.path.basename(output_folder_path)}_{group}_{id}_{"-".join([str(i) for i in coord])}.png')
+                # extract the patch
+                top_left_coord, size = self.get_rectangle_info(coord, group)
+                png = self.extract_crop(wsi_img, top_left_coord, size)
+                # save the image
+                print(f'Saving image {output_file_path}')
+                Image.fromarray(png[:, :, :3]).save(output_file_path)
 
     def get_rectangle_info(self, asap_coord, group):
         if group == 'hotspot':

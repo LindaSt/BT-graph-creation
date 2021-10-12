@@ -10,7 +10,6 @@ def process_xml_files(files_to_process, output_path):
     """
     Convert the xml files into numpy text files (one for each annotation group)
     """
-    # TODO: catch cases where hotspot is mispelled or PartOfGroup was not set to hotspot
     all_annotations = {}
     existing_files = set([os.path.basename(s).split('_output')[0] for s in glob.glob(os.path.join(output_path, '*.txt'))])
 

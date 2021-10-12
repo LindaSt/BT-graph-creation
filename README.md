@@ -1,6 +1,6 @@
 # BT-graph-creation
 This repo contains scripts to parse the [ASAP](https://computationalpathologygroup.github.io/ASAP/) 
-tif-overlays to maunal annotation xml-files, numpy files with the coordinates and gxl files (graphs).
+tif-overlays to manual annotation xml-files, numpy files with the coordinates and gxl files (graphs).
 
 ## Why?
 The annotations of the tumor bud and lymphocyte detections are in tif format, where each of them are represented as 
@@ -57,9 +57,6 @@ Finally, the graph-representations are saved in gxl format.
 1. `create_gxl_files.py`: creates the graphs as gxl files
    - **Input**:
      - `--asap_xml_files_folder`: path to the folder with the coordinates text files
-     - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image. 
-     It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0 
-       for the slide scanner used in this project)
      - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 
        - `radius-x`: connect elements in radius X (in mikrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
@@ -68,6 +65,12 @@ Finally, the graph-representations are saved in gxl format.
        - `lymphocytes`: only the lymphocytes are fully connected
        - `tumorbuds`: only the tumorbuds are fully connected
        - `--output-folder`: path to where output folder should be created
+     - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
+       The first column needs to have the node index number. The headers will be used as the feature name.
+       If there is a column named "filename", it will be dropped.
+     - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image. 
+     It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0 
+       for the slide scanner used in this project)
    - **Output**: 
      - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files 
        from the IAM Graph Databse). The x,y coordinates and edge distance labels are in mikro-meter.
@@ -80,7 +83,7 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
         - `file_path`: path to the mrxs single file or folder of files. 
         - `output_path`: path to the output folder. The output format is the same name as the mrxs file, with an appendix if multiple patches are extracted.
         - `asap_xml_path`: Path to the coordinate xml files (created with ASAP) single file or folder of files
-        - `overwrite`: optional. Overides exisiting extracted patches (default is False)
+        - `overwrite`: optional. Overrides existing extracted patches (default is False)
         - `hotspot`: optional. Set if hotspot should also be extracted (default False)
         - `lymph_patch_size`: optional. Size of the patch around the lymphocyte coordinates in pixels (default is 300))
         - `tb_patch_size`: optional. Size of the patch around the tumorbud coordinates in pixels (default is 300))

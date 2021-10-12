@@ -123,7 +123,7 @@ class Graph:
     @node_feature_csv.setter
     def node_feature_csv(self, csv_path):
         if csv_path:
-            df = pd.read_csv(csv_path, index_col=0).drop('filename', axis=1)
+            df = pd.read_csv(csv_path, index_col=0).drop('filename', axis=1, errors='ignore')
             self._node_feature_csv = pd.DataFrame.to_dict(df, orient='index')
         else:
             self._node_feature_csv = None
@@ -492,8 +492,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     # save the gxl files
     gxl_files.save(output_folder)
 
-    # TODO: update ReadMe with csv file information
-
 
 if __name__ == '__main__':
     fire.Fire(make_gxl_dataset)
+

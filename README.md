@@ -94,7 +94,9 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
         - Folder with one sub-folder per mrxs file containing the corresponding cropped patches.
 
 
-### Convert endpoints to dataset split (cxl files)
+(### Convert endpoints to dataset split (cxl files))
+
+TODO: update this
 1. `make_endpoint_json.py`: sets up json dictionary based on an excel file
    - **Input**:
      - `--output-path`: where the json files should be saved to
@@ -154,7 +156,6 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
           
           Where `BT-Hotspots` is the `--dataset-name`, `counts` is the number of elements in the subset,
           and `enpoint` is the `--endpoint`.
-
 
 ### Other utility scripts
 - `check_hotspot_xmls`: Checks if hotspot xml(s) have the right format and corrects them if possible 

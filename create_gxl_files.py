@@ -87,7 +87,7 @@ class Graph:
     """
 
     def __init__(self, file_id: str, file_path: str, spacing: float = 0.242797397769517, edge_config: EdgeConfig = None,
-                 csv_path: str = None):
+                 csv_path: str = None) -> None:
         # print(f'Creating graph for id {file_id}.')
         self.file_path = file_path
         self.file_id = file_id
@@ -416,14 +416,19 @@ class GxlFilesCreator:
         self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
         files_dict = {os.path.basename(f)[:-16]: f for f in
                       self.files_to_process}  # get rid of '_output_asap' at the end
+        # TODO: ask Lars how to make this neater
         if self.spacings:
             return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id],
                           edge_config=self.edge_config, csv_path=self.matched_csv[file_id])
                     for file_id, files_path in files_dict.items()]
         else:
-            return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config,
-                          csv_path=self.matched_csv[file_id])
-                    for file_id, files_path in files_dict.items()]
+            if self.matched_csv:
+                return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config,
+                              csv_path=self.matched_csv[file_id])
+                        for file_id, files_path in files_dict.items()]
+            else:
+                return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
+                        for file_id, files_path in files_dict.items()]
 
     def save(self, output_folder):
         # create output folder if it does not exist
@@ -483,7 +488,8 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
         sys.exit(-1)
 
     # get a list of the csv files
-    node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
+    if node_feature_csvs is not None:
+        node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
 
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
@@ -494,5 +500,6 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
 
 
 if __name__ == '__main__':
+    # TODO: Integrate option to feed a dataset split json file
     fire.Fire(make_gxl_dataset)
 

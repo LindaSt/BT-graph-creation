@@ -48,9 +48,9 @@ class EdgeConfig:
             edge_def['fully_connected'] = self.fully_connected
         # fully connected 'all' supersedes the other edge definitions
         if self.fully_connected != 'all':
-            if self.edge_def_tb_to_tb:
+            if self.edge_def_tb_to_tb and self.fully_connected != 'tumorbuds':
                 edge_def['tb_to_tb'] = self.edge_def_tb_to_tb
-            if self.edge_def_tb_to_l:
+            if self.edge_def_tb_to_l and self.fully_connected != 'lymphocytes':
                 edge_def['tb_to_l'] = self.edge_def_tb_to_l
         return edge_def
 
@@ -94,10 +94,6 @@ class Graph:
         self.spacing = spacing
         self.node_feature_csv = csv_path
 
-        # set the feature names
-        # self.node_feature_names = ['type', 'x', 'y']  # TODO: get this automatically?
-        # if self.node_feature_csv is not None:
-        #     self.node_feature_names = ['type', 'x', 'y']
         self.edge_feature_names = []  # will get added during self.add_edges()
 
         # read the xml file
@@ -430,26 +426,45 @@ class GxlFilesCreator:
                 return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
                         for file_id, files_path in files_dict.items()]
 
-    def save(self, output_folder):
+    def save_gxls(self, output_folder: str, datasplit_dict: dict = None):
         # create output folder if it does not exist
         subfolder = str(self.edge_config) if self.edge_config else 'no_edges'
         output_path = os.path.join(output_folder, subfolder)
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
+        if datasplit_dict is not None:
+            folders_to_create = [os.path.join(output_path, split, cls) for split, d in datasplit_dict.items() for cls in d.keys()]
+            _ = [os.makedirs(p) for p in folders_to_create if not os.path.isdir(p)]
+
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
+        file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
+                             for file_id in file_ids}
         for file_id, xml_tree in self.gxl_trees.items():
-            with open(os.path.join(output_path, file_id + '.gxl'), 'wb') as f:
+            if datasplit_dict is None:
+                outfolder = output_path
+            else:
+                try:
+                    outfolder = os.path.join(output_path, "/".join(file_id_to_folder[file_id.split('_')[0]]))
+                except KeyError:
+                    self.invalid_files.append(file_id)
+                    continue
+            # save the file
+            with open(os.path.join(outfolder, file_id + '.gxl'), 'wb') as f:
                 f.write(ET.tostring(xml_tree, pretty_print=True))
 
+        self._save_log(output_path, subfolder)
+
+    def _save_log(self, output_folder: str, subfolder: str):
         # Save the files where we had a missing spacing, xml or csv file (if present)
-        with open(os.path.join(output_folder, 'invalid_file_ids.txt'), 'w') as f:
-            f.write('\n'.join(sorted(self.invalid_files)))
+        if len(self.invalid_files) > 0:
+            with open(os.path.join(output_folder, f'{subfolder}_invalid_file_ids.txt'), 'w') as f:
+                f.write('\n'.join(sorted(self.invalid_files)))
 
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
                      edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,
-                     node_feature_csvs: str = None):
+                     node_feature_csvs: str = None, split_json: str = None):
     """
     INPUT
     --asap-xml-files-folder: path to the folder with the coordinates text files
@@ -461,6 +476,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     --spacing-json: (optional) Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
     --output-folder: path to where output folder should be created
     --node-feature-csvs: path to folder with csv files with additional node features (e.g. ImageNet features)
+    --split-json: path to a json file with the dataset splits (per patient, created by make_dataset_split.json)
 
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
@@ -495,11 +511,17 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
                                 node_feature_csvs=node_feature_csvs)
 
+    # read the split json (if present)
+    if split_json is not None:
+        with open(split_json) as data_file:
+            datasplit_dict = json.load(data_file)
+    else:
+        datasplit_dict = None
+
     # save the gxl files
-    gxl_files.save(output_folder)
+    gxl_files.save_gxls(output_folder, datasplit_dict=datasplit_dict)
 
 
 if __name__ == '__main__':
-    # TODO: Integrate option to feed a dataset split json file
     fire.Fire(make_gxl_dataset)
 

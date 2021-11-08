@@ -83,10 +83,10 @@ def create_asap_xmls(all_txt_files, xml_output):
 
 def check_output(txt_output, xml_output, all_hotspots):
     # make sure all the hotspots were processed and that there are three txt files for each hotspot
-    txt_files = [os.path.basename(f).split('_CD8')[0] for f in glob.glob(txt_output + '/*.txt')]
+    txt_files = [os.path.basename(f).split('_CD')[0] for f in glob.glob(txt_output + '/*.txt')]
     txt_files_ids = set(txt_files)
-    xml_files_ids = set([os.path.basename(f).split('_CD8')[0] for f in glob.glob(xml_output + '/*.xml')])
-    hotspot_ids = set([os.path.basename(f).split('_CD8')[0] for f in all_hotspots])
+    xml_files_ids = set([os.path.basename(f).split('_CD')[0] for f in glob.glob(xml_output + '/*.xml')])
+    hotspot_ids = set([os.path.basename(f).split('_CD')[0] for f in all_hotspots])
 
     # check that there are three files for each hotspot
     text_files_unique = np.unique(txt_files, return_counts=True)

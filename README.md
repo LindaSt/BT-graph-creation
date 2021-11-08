@@ -54,7 +54,7 @@ Finally, the graph-representations are saved in gxl format.
      - Folder with xml files: one per WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
        annotations.
        
-1. `create_gxl_files.py`: creates the graphs as gxl files
+1. `create_gxl_files.py`: creates the graphs as gxl files TODO: update for split_json
    - **Input**:
      - `--asap_xml_files_folder`: path to the folder with the coordinates text files
      - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 

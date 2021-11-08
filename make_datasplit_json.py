@@ -56,9 +56,9 @@ class SplitJson:
             d = {self.endpoint_name: int(self.endpoints_df.at[filename, self.endpoint_name]),
                  'Folder': self.endpoints_df.at[filename, 'Folder']}
             if patient_id in endpoints_dict:
-                endpoints_dict[patient_id].update({filename: d})
+                endpoints_dict[str(patient_id)].update({filename: d})
             else:
-                endpoints_dict[patient_id] = {filename: d}
+                endpoints_dict[str(patient_id)] = {filename: d}
 
         return endpoints_dict
 
@@ -78,6 +78,8 @@ class SplitJson:
         class_patients = {c: [i['patient_id'] for i in patient_id_class_pairs if i['class'] == c] for c in classes}
 
         # get the indices per class on how to split into train, test and val
+        splits = {c: {subset: indices for subset, indices in self.get_indices(len(patients), split=self.split).items()} for
+                            c, patients in class_patients.items()}
         splits_per_class = {c: {subset: [patients[i] for i in indices] for subset, indices in self.get_indices(len(patients), split=self.split).items()} for
                             c, patients in class_patients.items()}
 
@@ -85,8 +87,9 @@ class SplitJson:
         split_dict = {'train': {}, 'val': {}, 'test': {}}
         for class_id, subset_list in splits_per_class.items():
             for subset, file_list in subset_list.items():
-                d = {f: class_id for f in file_list}
-                split_dict[subset] = {**split_dict[subset], **d}
+                split_dict[subset][str(class_id)] = file_list
+                # d = {f: class_id for f in file_list}
+                # split_dict[subset] = {**split_dict[subset], **d}
 
         return split_dict
 
@@ -132,10 +135,10 @@ class SplitJson:
     def save_endpoint_jsons(self):
         # save the json
         with open(os.path.join(self.output_folder, f'{self.input_filename}-all.json'), 'w') as fp:
-            json.dump(self.endpoints_dict, fp, indent=4, cls=NpEncoder)
+            json.dump(self.endpoints_dict, fp, indent=4)
 
         with open(os.path.join(self.output_folder, f'{self.input_filename}-split.json'), 'w') as fp:
-            json.dump(self.split_dict, fp, indent=4, cls=NpEncoder)
+            json.dump(self.split_dict, fp, indent=4)
 
 
 if __name__ == '__main__':
@@ -166,14 +169,15 @@ if __name__ == '__main__':
     
     json file dataset split with structure
         train:
-            Filename-ID: endpoint value
+            endpoint value: [Filename-ID, ...]
             ...
         val:
-            Filename-ID: endpoint value
+            endpoint value: [Filename-ID, ...]
             ...
         test:
-            Filename-ID: endpoint value
+            endpoint value: [Filename-ID, ...]
             ...
     """
+    #TODO: add asserts to make sure no data is lost
     fire.Fire(SplitJson)
 

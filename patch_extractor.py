@@ -44,7 +44,7 @@ class BTPatchExtractor:
         # instantiate optional parameters
         self.coord_path = asap_xml_path
         self.overwrite = overwrite
-        self.staining = 'CD8'
+        self.staining = 'CD'
         self.level = level
         self.matched_files_excel = matched_files_excel
         self.extract_hotspot = hotspot
@@ -209,7 +209,7 @@ class BTPatchExtractor:
                 png = self.extract_crop(wsi_img, top_left_coord, size)
                 # save the image
                 print(f'Saving image {output_file_path}')
-                Image.fromarray(png[:, :, :3]).save(output_file_path)
+                Image.fromarray(png[:, :, :3]).save_gxls(output_file_path)
 
     def get_rectangle_info(self, asap_coord, group):
         if group == 'hotspot':

@@ -94,9 +94,8 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
         - Folder with one sub-folder per mrxs file containing the corresponding cropped patches.
 
 
-(### Convert endpoints to dataset split (cxl files))
+### Create dataset split(s)
 
-TODO: update this
 1. `make_endpoint_json.py`: sets up json dictionary based on an excel file
    - **Input**:
      - `--output-path`: where the json files should be saved to
@@ -116,13 +115,57 @@ TODO: update this
           3 : only follow up (>= 2 years) with recurrence
            
    - **Input**:
-     - json file with structure: <br />
-       >patient-id: patient id<br />
-       >>filename:  file name<br />
-         folder: folder name<br />
-         endpoint1: endpoint value<br />
-         endpoint2: endpoint value<br />
-         ...
+     - json file with structure:
+        ```
+        train:
+            endpoint value: [Filename-ID, ...]
+            ...
+        val:
+            endpoint value: [Filename-ID, ...]
+            ...
+        test:
+            endpoint value: [Filename-ID, ...]
+            ...   
+        ```
+
+1. `split_gxl_dataset.py`: Splits an existing folder of gxl files into the train/val/test according to a provided
+   JSON file.
+    - **Input**:
+        - `--gxl-folder-path`: folder containing the gxl files
+        - `--split-json`: path to the json file with the endpoint(s) data
+        - `--output-path`: (optional) where the gxl files should be saved to. If not set, the input folder will be
+          re-organized
+          
+        The json file needs to be in the following structure:
+        ```
+        train:
+            endpoint value: [Filename-ID, ...]
+            ...
+        val:
+            endpoint value: [Filename-ID, ...]
+            ...
+        test:
+            endpoint value: [Filename-ID, ...]
+            ...   
+        ```
+    - **Output**: Folder structure with data split like this:
+        ```
+        train:
+            class1
+                file1.gxl
+                ...
+            ...
+        val:
+            class1
+                file1.gxl
+                ...
+            ...
+        test:
+            class1
+                file1.gxl
+                ...
+            ...
+        ```    
 
 1. `endpoints_json_to_cxl.py`: splits the data from the json file into train, vaild and test cxl files. 
     It is split based on the patient-id, so if your slides are very unequally distributed amongh the patients,
@@ -135,7 +178,7 @@ TODO: update this
      - `--split`: (optional, default 0.4) how much should be split off for train and test (will be split in half for test valid) 
      - `--seed`: (optional, default 42) set seed for split
         
-     json file needs to be in the following structure (output of `make-endpoint-json.py`): <br />
+     json file needs to be in the following structure: <br />
        >patient-id: patient-id<br />
        >>filename: file name<br />
          folder: folder name<br />

@@ -438,7 +438,8 @@ class GxlFilesCreator:
 
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
-        file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
+        if datasplit_dict is not None:
+            file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
                              for file_id in file_ids}
         for file_id, xml_tree in self.gxl_trees.items():
             if datasplit_dict is None:

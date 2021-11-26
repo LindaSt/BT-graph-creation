@@ -73,7 +73,7 @@ def check_hotspots(input_path: str, output_path: str, overwrite: bool = False, m
         os.mkdir(output_path)
 
     if os.path.isdir(input_path):
-        file_list = [(i, os.path.basename(i).split('.')[0]) for i in glob.glob(os.path.join(input_path, "*.xml"))]
+        file_list = [(i, os.path.basename(i).split('.xml')[0]) for i in glob.glob(os.path.join(input_path, "*.xml"))]
     else:
         file_list = [(input_path, os.path.basename(input_path).split('.')[0])]
 
@@ -83,7 +83,7 @@ def check_hotspots(input_path: str, output_path: str, overwrite: bool = False, m
     for hotspot_file_path, outfile_name in file_list:
         try:
             filename = os.path.basename(hotspot_file_path)
-            if overwrite and os.path.isfile(os.path.join(output_path, filename)):
+            if not overwrite and os.path.isfile(os.path.join(output_path, filename)):
                 print(f'File {filename} already exists (skipping file).')
             else:
                 xml = check_xml(hotspot_file_path)

@@ -22,10 +22,11 @@ class EdgeConfig:
     fully_connected: specify either 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def* arguments)
     """
 
-    def __init__(self, edge_def_tb_to_l=None, edge_def_tb_to_tb=None, fully_connected=None):
+    def __init__(self, edge_def_tb_to_l=None, edge_def_tb_to_tb=None, fully_connected=None, other=None):
         self.edge_def_tb_to_l = self.decode(edge_def_tb_to_l)
         self.edge_def_tb_to_tb = self.decode(edge_def_tb_to_tb)
         self.fully_connected = fully_connected
+        self.other = other
 
     @property
     def fully_connected(self):
@@ -38,6 +39,16 @@ class EdgeConfig:
         self._fully_connected = fully_connected
 
     @property
+    def other(self):
+        return self._other
+
+    @other.setter
+    def other(self, other):
+        if other is not None:
+            assert other in ['hierarchical']
+        self._other = other
+
+    @property
     def edge_definitions(self) -> dict:
         """
         sets up a dictionary with the edge definitions
@@ -46,6 +57,8 @@ class EdgeConfig:
         edge_def = {}
         if self.fully_connected:
             edge_def['fully_connected'] = self.fully_connected
+        if self.other:
+            edge_def['other_edge_fct'] = self.other
         # fully connected 'all' supersedes the other edge definitions
         if self.fully_connected != 'all':
             if self.edge_def_tb_to_tb and self.fully_connected != 'tumorbuds':
@@ -158,7 +171,8 @@ class Graph:
         # add the node features from the csv file, if present
         node_dict = {**self.lymph_nodes, **self.tb_nodes}
         if self.node_feature_csv is not None:
-            node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in node_dict.items()}
+            node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in
+                         node_dict.items()}
         return node_dict
 
     # *********** adding edges ***********
@@ -171,7 +185,7 @@ class Graph:
         # get all the edges
         if self.edge_config is not None and len(self.edge_config) > 0:
             for edge_type, param_list in self.edge_config.items():
-                # edge_fct can be {'fully_connected', 'tb_to_tb', 'tb_to_l'}
+                # edge_fct can be {'fully_connected', 'tb_to_tb', 'tb_to_l', 'hierachical'}
                 eval(f'self.{edge_type}')(param_list)
 
     def update_edge_dict(self, coo_matrix, edge_features, feature_name):
@@ -212,11 +226,29 @@ class Graph:
         node_dict = {'all': self.xy_all_nodes, 'tumorbuds': self.xy_tb_nodes, 'lymphocytes': self.xy_lymph_nodes}
         self.fully_connect(node_dict[params])
 
-    def fully_connect(self, node_dict):
-        # calculate the distances
-        features_dict = {}
+    def other_edge_fct(self, params):
+        if params == 'hierarchical':
+            self.hierarchical()
 
+    def hierarchical(self):
+        # connect lymphocytes to closest TB
+        self.to_closest(self.xy_lymph_nodes, self.xy_tb_nodes)
+        # fully connect lymphocytes that are connected to the same bud
+        tb_ids_sub_graphs = {n: [] for n in self.xy_tb_nodes.keys()}
+        sub_graphs = [(int(i) for i in e.split('_')) for e in self.edge_dict.keys()]
+        for (e_from, e_to) in sub_graphs:
+            if e_from in tb_ids_sub_graphs.keys():
+                tb_ids_sub_graphs[e_from].append(e_to)
+            elif e_to in tb_ids_sub_graphs.keys():
+                tb_ids_sub_graphs[e_to].append(e_from)
+        for tb_id, lymph_list in tb_ids_sub_graphs.items():
+            self.fully_connect({i: self.xy_lymph_nodes[i] for i in lymph_list})
+        # fully connect tumorbuds
+        self.fully_connected('tumorbuds')
+
+    def fully_connect(self, node_dict):
         dict_ids = list(node_dict.keys())
+        # features_dict = {}
         # for i in range(len(node_dict)):
         #     for j in range(i + 1, len(node_dict)):
         #         n1 = node_dict[dict_ids[i]]
@@ -227,6 +259,22 @@ class Graph:
         features_dict = {tuple(sorted([dict_ids[i], dict_ids[j]])): distance.euclidean(node_dict[dict_ids[i]],
                                                                                        node_dict[dict_ids[j]]) for i in
                          range(len(node_dict)) for j in range(i + 1, len(node_dict))}
+        # update the dictionary
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
+                              feature_name='distance')
+
+    def to_closest(self, from_dict, to_dict):
+        features_dict = {}
+        # calculate the distances
+        if len(from_dict) > 0 and len(to_dict) > 0:
+            for id_f, xy_f in from_dict.items():
+                dist_list = [distance.euclidean(xy_f, xy_t) for xy_t in to_dict.values()]
+                d = min(dist_list)
+                id_t = list(to_dict.keys())[dist_list.index(d)]
+                edge = tuple(sorted([id_f, id_t]))
+                if edge not in features_dict.keys():
+                    features_dict[edge] = d
+
         # update the dictionary
         self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
                               feature_name='distance')
@@ -433,14 +481,16 @@ class GxlFilesCreator:
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
         if datasplit_dict is not None:
-            folders_to_create = [os.path.join(output_path, split, cls) for split, d in datasplit_dict.items() for cls in d.keys()]
+            folders_to_create = [os.path.join(output_path, split, cls) for split, d in datasplit_dict.items() for cls in
+                                 d.keys()]
             _ = [os.makedirs(p) for p in folders_to_create if not os.path.isdir(p)]
 
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
         if datasplit_dict is not None:
-            file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
-                             for file_id in file_ids}
+            file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in
+                                 d.items()
+                                 for file_id in file_ids}
         for file_id, xml_tree in self.gxl_trees.items():
             if datasplit_dict is None:
                 outfolder = output_path
@@ -465,7 +515,7 @@ class GxlFilesCreator:
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
                      edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,
-                     node_feature_csvs: str = None, split_json: str = None):
+                     node_feature_csvs: str = None, split_json: str = None, other: str = None):
     """
     INPUT
     --asap-xml-files-folder: path to the folder with the coordinates text files
@@ -484,7 +534,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     TODO: remove this: The distances are centered (xy - xy(average)).?
     """
     # get the edge definitions
-    edge_def_config = EdgeConfig(edge_def_tb_to_l, edge_def_tb_to_tb, fully_connected)
+    edge_def_config = EdgeConfig(edge_def_tb_to_l, edge_def_tb_to_tb, fully_connected, other)
 
     # read the spacing json
     if spacing_json:
@@ -525,4 +575,3 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
 
 if __name__ == '__main__':
     fire.Fire(make_gxl_dataset)
-

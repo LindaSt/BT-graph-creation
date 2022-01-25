@@ -53,7 +53,7 @@ def get_obj_coords(patch, x_indx, y_indx, ratio):
     return coords
 
 
-def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_indx, spacing_json_filepath=None,
+def process_files(files_to_process, output_base_path, step_size, bud_indx_min, lymp_indx, spacing_json_filepath=None,
                   lymph_only=False, buds_only=False):
     """
     Processes a list of tif files with lymphocyte and tumor bud detections (from JMB)
@@ -69,7 +69,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_
         if "combined" in file:
             file_name = os.path.splitext(os.path.basename(file))[0].split("_combined")[0]
         else:
-            file_name = f'{os.path.splitext(os.path.basename(file))[0].split(".tif")[0]}_output'
+            file_name = f'{os.path.splitext(os.path.basename(file))[0].split(".tif")[0]}'
 
         # save the coordinates
         all_bud_coords = np.empty((0, 2), int)
@@ -84,7 +84,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_
         print("Processing: {}".format(file_name))
 
         # check if the files are already present
-        if not os.path.isfile(output_file_lymp) and not os.path.isfile(output_file_bud):
+        if not os.path.isfile(output_file_lymp) or not os.path.isfile(output_file_bud):
             img_obj = mir.MultiResolutionImageReader().open(file)
             assert file_name not in all_spacing
             all_spacing[file_name] = img_obj.getSpacing()[0]
@@ -111,11 +111,11 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_
                     # buds
                     if not lymph_only:
                         bud_patch = np.zeros(img_patch.shape, np.uint8)
-                        bud_patch[img_patch == bud_indx] = 1
+                        bud_patch[img_patch >= bud_indx_min] = 1
                         # do some erosions and dillations to close gaps
-                        kernel = np.ones((5, 5), np.uint8)
-                        bud_patch = cv2.erode(bud_patch, kernel, iterations=1)
-                        bud_patch = cv2.dilate(bud_patch, kernel, iterations=1)
+                        # kernel = np.ones((5, 5), np.uint8)
+                        # bud_patch = cv2.erode(bud_patch, kernel, iterations=1)
+                        # bud_patch = cv2.dilate(bud_patch, kernel, iterations=1)
 
                         bud_coords = get_obj_coords(bud_patch, x_indx, y_indx, ratio * 2)
                         if bud_coords is not None:
@@ -156,14 +156,9 @@ if __name__ == '__main__':
     spacing_json = args.spacing_json
 
     # set the indices for the bud and lymphocyte annotations
-    # for V1 annotations
-    # bud_indx = 3
-    # lymp_indx = 9
-    # for V1 annotations
-    bud_indx = 1
-    lymp_indx = 4
-    # for the missing lymphocyte annotations
-    # lymp_indx = 1
+    # bud output: 0 for background, 1 for foreground, >1 for buds (mostly 2, but overlaps can create 3 or more)
+    bud_indx_min = 2
+    lymp_indx = 1
 
     # get a list of all the tif files to process
     tif_files = os.path.join(args.tif_files_folder, r'*.tif')
@@ -178,5 +173,5 @@ if __name__ == '__main__':
     step_size = args.window_size
 
     # read the annotations and create the coordinate files
-    process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_indx, spacing_json,
+    process_files(files_to_process, output_base_path, step_size, bud_indx_min, lymp_indx, spacing_json,
                   args.lymph_only, args.buds_only)

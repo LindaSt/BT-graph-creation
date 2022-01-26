@@ -22,6 +22,7 @@ Finally, the graph-representations are saved in gxl format.
      - `--window-size`: optional. Size (in pixels) of the window that is processed at once.
      - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image that should
      be updated. If not provided a new file is created. This is later used to compute the distance between elements.
+     - `--overwrite`: optional. Overrides existing files (default is False) 
    - **Output**:
      - Two text files per WSI: one file each for the tumor buds and the lymphocytes with the coordinates.
      - Json file: contains the spacing for each WSI.
@@ -80,15 +81,15 @@ Finally, the graph-representations are saved in gxl format.
 1. `patch_extractor.py`: let's you extract patches from a single mrxs file or a folder based on annotations in
 an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumorbuds` and `hotspot`).
     - **Input**:
-        - `file_path`: path to the mrxs single file or folder of files. 
-        - `output_path`: path to the output folder. The output format is the same name as the mrxs file, with an appendix if multiple patches are extracted.
-        - `asap_xml_path`: Path to the coordinate xml files (created with ASAP) single file or folder of files
-        - `overwrite`: optional. Overrides existing extracted patches (default is False)
-        - `hotspot`: optional. Set if hotspot should also be extracted (default False)
-        - `lymph_patch_size`: optional. Size of the patch around the lymphocyte coordinates in pixels (default is 300))
-        - `tb_patch_size`: optional. Size of the patch around the tumorbud coordinates in pixels (default is 300))
-        - `level`: optional. Level of the mrxs file that should be used for the conversion (default is 0).
-        - `matched_files_excel`: optional. If provided, then this file will be used to match the xmls to the mrxs file names
+        - `--file_path`: path to the mrxs single file or folder of files. 
+        - `--output_path`: path to the output folder. The output format is the same name as the mrxs file, with an appendix if multiple patches are extracted.
+        - `--asap_xml_path`: Path to the coordinate xml files (created with ASAP) single file or folder of files
+        - `--overwrite`: optional. Overrides existing extracted patches (default is False)
+        - `--hotspot`: optional. Set if hotspot should also be extracted (default False)
+        - `--lymph_patch_size`: optional. Size of the patch around the lymphocyte coordinates in pixels (default is 300))
+        - `--tb_patch_size`: optional. Size of the patch around the tumorbud coordinates in pixels (default is 300))
+        - `--level`: optional. Level of the mrxs file that should be used for the conversion (default is 0).
+        - `--matched_files_excel`: optional. If provided, then this file will be used to match the xmls to the mrxs file names
             (specify info in MATCHED_EXEL_INFO)
     - **Output**:
         - Folder with one sub-folder per mrxs file containing the corresponding cropped patches.

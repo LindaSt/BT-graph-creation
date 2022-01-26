@@ -11,16 +11,15 @@ def process_xml_files(files_to_process, output_path):
     Convert the xml files into numpy text files (one for each annotation group)
     """
     all_annotations = {}
-    existing_files = set([os.path.basename(s).split('_output')[0] for s in glob.glob(os.path.join(output_path, '*.txt'))])
+    existing_files = set([os.path.basename(s).split('_coor')[0] for s in glob.glob(os.path.join(output_path, '*.txt'))])
 
     for file_path in files_to_process:
-        if os.path.basename(file_path).split('_output')[0] in existing_files:
+        if os.path.basename(file_path).split('.xml')[0] in existing_files:
             print('File {} already exists!'.format(file_path))
         else:
             try:
                 print('Processing file {}'.format(file_path))
                 filename = os.path.basename(os.path.splitext(file_path)[0])
-
                 all_annotations[filename] = parse_xml(file_path)
             except:
                 print(f'Something went wrong with file {filename}. Skipping...')

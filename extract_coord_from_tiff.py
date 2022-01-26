@@ -53,8 +53,8 @@ def get_obj_coords(patch, x_indx, y_indx, ratio):
     return coords
 
 
-def process_files(files_to_process, output_base_path, step_size, bud_indx_min, lymp_indx, spacing_json_filepath=None,
-                  lymph_only=False, buds_only=False):
+def process_files(files_to_process, output_base_path, step_size, bud_indx, lymp_indx, spacing_json_filepath=None,
+                  lymph_only=False, buds_only=False, overwrite=False):
     """
     Processes a list of tif files with lymphocyte and tumor bud detections (from JMB)
     """
@@ -65,6 +65,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx_min, l
     else:
         all_spacing = {}
 
+    print('Existing files will be overwritten!')
     for file in files_to_process:
         if "combined" in file:
             file_name = os.path.splitext(os.path.basename(file))[0].split("_combined")[0]
@@ -84,7 +85,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx_min, l
         print("Processing: {}".format(file_name))
 
         # check if the files are already present
-        if not os.path.isfile(output_file_lymp) or not os.path.isfile(output_file_bud):
+        if (not os.path.isfile(output_file_lymp) or not os.path.isfile(output_file_bud)) or overwrite:
             img_obj = mir.MultiResolutionImageReader().open(file)
             assert file_name not in all_spacing
             all_spacing[file_name] = img_obj.getSpacing()[0]
@@ -111,11 +112,11 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx_min, l
                     # buds
                     if not lymph_only:
                         bud_patch = np.zeros(img_patch.shape, np.uint8)
-                        bud_patch[img_patch >= bud_indx_min] = 1
+                        bud_patch[img_patch == bud_indx] = 1
                         # do some erosions and dillations to close gaps
-                        # kernel = np.ones((5, 5), np.uint8)
-                        # bud_patch = cv2.erode(bud_patch, kernel, iterations=1)
-                        # bud_patch = cv2.dilate(bud_patch, kernel, iterations=1)
+                        kernel = np.ones((5, 5), np.uint8)
+                        bud_patch = cv2.erode(bud_patch, kernel, iterations=1)
+                        bud_patch = cv2.dilate(bud_patch, kernel, iterations=1)
 
                         bud_coords = get_obj_coords(bud_patch, x_indx, y_indx, ratio * 2)
                         if bud_coords is not None:
@@ -136,7 +137,7 @@ def process_files(files_to_process, output_base_path, step_size, bud_indx_min, l
             if not lymph_only and len(all_bud_coords) > 0:
                 np.savetxt(output_file_bud, all_bud_coords, fmt='%.3f')
         else:
-            print('The coordinates files {} and {} already exists'.format(output_file_lymp, output_file_bud))
+            print('The coordinates files {} or {} already exist. To overwrite use --overwrite.'.format(output_file_lymp, output_file_bud))
 
     # Save spacing as json to later calculate the distance
     with open(os.path.join(output_base_path, 'spacing_cd8_files.json'), 'w') as fp:
@@ -151,13 +152,14 @@ if __name__ == '__main__':
     parser.add_argument("--spacing-json", type=str, default=None)
     parser.add_argument("--lymph-only", action='store_true', default=False)
     parser.add_argument("--buds-only", action='store_true', default=False)
+    parser.add_argument("--overwrite", action='store_true', default=False)
     args = parser.parse_args()
 
     spacing_json = args.spacing_json
 
     # set the indices for the bud and lymphocyte annotations
     # bud output: 0 for background, 1 for foreground, >1 for buds (mostly 2, but overlaps can create 3 or more)
-    bud_indx_min = 2
+    bud_indx = 2
     lymp_indx = 1
 
     # get a list of all the tif files to process
@@ -173,5 +175,6 @@ if __name__ == '__main__':
     step_size = args.window_size
 
     # read the annotations and create the coordinate files
-    process_files(files_to_process, output_base_path, step_size, bud_indx_min, lymp_indx, spacing_json,
-                  args.lymph_only, args.buds_only)
+    process_files(files_to_process=files_to_process, output_base_path=output_base_path, step_size=step_size,
+                  bud_indx=bud_indx, lymp_indx=lymp_indx, spacing_json_filepath=spacing_json,
+                  lymph_only=args.lymph_only, buds_only=args.buds_only, overwrite=args.overwrite)

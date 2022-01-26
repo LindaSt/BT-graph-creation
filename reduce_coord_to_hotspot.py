@@ -41,33 +41,33 @@ def in_square(square_coordinates, point):
 def read_hotspot_xmls(hotspot_xmls):
     all_hotspots = {}
     for file_path in hotspot_xmls:
-        tree = ET.parse(file_path)
-        root = tree.getroot()
-        filename = os.path.basename(os.path.splitext(file_path)[0])
-        filename = re.sub(' ', '_', filename)
+        if os.path.isfile(file_path):
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            filename = os.path.basename(os.path.splitext(file_path)[0])
+            filename = re.sub(' ', '_', filename)
 
-        group = 'hotspot'
-        annotations_elements = [i for i in root.iter('Annotation') if i.attrib['PartOfGroup'] == group]
+            group = 'hotspot'
+            annotations_elements = [i for i in root.iter('Annotation') if i.attrib['PartOfGroup'] == group]
 
-        annotations = [[[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')] for element in
-                       annotations_elements]
+            annotations = [[[float(i.attrib['X']), float(i.attrib['Y'])] for i in element.iter('Coordinate')] for element in
+                           annotations_elements]
 
-        all_hotspots[filename] = annotations
-
+            all_hotspots[filename] = annotations
+        else:
+            print(f'File {file_path} does not exist.')
     return all_hotspots
 
 
-def parse_hotspot_xml(hotspot_path, txt_output):
-    hotspot_xmls = glob.glob(os.path.join(hotspot_path, r'*.xml'))
-
+def parse_hotspot_xml(hotspot_xmls, txt_output):
     # make txt files
     process_xml_files(hotspot_xmls, txt_output)
     # rename the hotspot txt files to add '_output' into them so all the files have the same name
-    hotspot_txts = glob.glob(os.path.join(txt_output, r'*hotspot*'))
-    for ht in hotspot_txts:
-        if '_output' not in ht:
-            regex = re.search('(.*)(_coordinates.*)', ht)
-            shutil.move(ht, '{}_output{}'.format(regex.group(1), regex.group(2)))
+    # hotspot_txts = glob.glob(os.path.join(txt_output, r'*hotspot*'))
+    # for ht in hotspot_txts:
+    #     if '_output' not in ht:
+    #         regex = re.search('(.*)(_coordinates.*)', ht)
+    #         shutil.move(ht, '{}_output{}'.format(regex.group(1), regex.group(2)))
 
     # read in the hotspot xml
     hotspots = read_hotspot_xmls(hotspot_xmls)
@@ -110,11 +110,7 @@ def check_output(txt_output, xml_output, all_hotspots):
         text_file.write("\n".join([stats, missing_txt_msg, missing_xml_msg]))
 
 
-def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, all_hotspots, overwrite=False):
-    coor_txt_files_path = os.path.join(coor_txt_files_path, r'*_coordinates_*.txt')
-    all_txt_files = glob.glob(coor_txt_files_path)
-    txt_files_to_process = list(set([re.search(r'(.*)_output_coordinates', f).group(1) for f in all_txt_files]))
-
+def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, all_hotspots, overwrite=False):
     output_text_files = []
     error_files = []
     for file in txt_files_to_process:
@@ -125,7 +121,7 @@ def create_hotspot_only_txt_files(coor_txt_files_path, xml_output, txt_output, a
                 hotspots = all_hotspots[os.path.basename(file)]
 
                 # load the file
-                file_path = '{}_output_coordinates_{}.txt'.format(file, group)
+                file_path = '{}_coordinates_{}.txt'.format(file, group)
                 output_txt_file = os.path.join(txt_output, os.path.basename(file_path))
 
                 if os.path.isfile(file_path):
@@ -172,10 +168,14 @@ if __name__ == '__main__':
 
     xml_output, txt_output = setup_output_folders(output_path)
 
-    # get the hotspots (dict)
-    hotspots = parse_hotspot_xml(hotspot_path, txt_output)
+    # TODO: hotspot not saved as text files and not included in xml
+    coor_txt_files_path = os.path.join(args.coordinate_txt_files, r'*_coordinates_*.txt')
+    all_txt_files = glob.glob(coor_txt_files_path)
+    txt_files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))
 
-    coordinate_txt_files = args.coordinate_txt_files
+    # get the hotspots (dict)
+    hotspot_files = [os.path.join(hotspot_path, f'{os.path.basename(f)}.xml') for f in txt_files_to_process]
+    hotspots = parse_hotspot_xml(hotspot_files, txt_output)
 
     # create the hotspot asap and txt files
-    create_hotspot_only_txt_files(coordinate_txt_files, xml_output, txt_output, hotspots, args.overwrite)
+    create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, hotspots, args.overwrite)

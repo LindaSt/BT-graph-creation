@@ -168,7 +168,6 @@ if __name__ == '__main__':
 
     xml_output, txt_output = setup_output_folders(output_path)
 
-    # TODO: hotspot not saved as text files and not included in xml
     coor_txt_files_path = os.path.join(args.coordinate_txt_files, r'*_coordinates_*.txt')
     all_txt_files = glob.glob(coor_txt_files_path)
     txt_files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))

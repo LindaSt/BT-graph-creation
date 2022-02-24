@@ -11,8 +11,9 @@ from multiprocessing import Process
 
 class BTPatchExtractor:
     def __init__(self, file_path: str, output_path: str, asap_xml_path: str, overwrite: bool = False,
-                 hotspot: bool = False, level: int = 0, lymph_patch_size: int = 300, tb_patch_size: int = 300,
-                 matched_files_excel: str = None, n_threads: int = 6, no_multi_thread: bool = False):
+                 hotspot: bool = False, level: int = 0, lymph_patch_size: int = 200, tb_patch_size: int = 200,
+                 matched_files_excel: str = None, n_threads: int = 6, no_multi_thread: bool = False,
+                 staining: str = 'CD8'):
         """
         This Object extracts (patches of) an mrxs file to a png format.
 
@@ -28,15 +29,17 @@ class BTPatchExtractor:
             overides exisiting extracted patches (default is False)
         :param hotspot: bool (optional)
             set if hotspot should also be extracted (default False)
-        :param lymph_patch_size: int (optional)
+        :param lymph_patch_size: int (optional, default is 200 pixel)
             size of the patch around the lymphocyte coordinates
-        :param tb_patch_size: int (optional)
+        :param tb_patch_size: int (optional, default is 200 pixel)
             size of the patch around the tumor bud coordinates
-        :param level: int (optional)
-            Level of the mrxs file that should be used for the conversion (default is 0).
+        :param level: int (optional, default is 0)
+            Level of the mrxs file that should be used for the conversion.
         :param matched_files_excel: str
             Optional. If provided, then this file will be used to match the xmls to the mrxs file names
             (specify info in MATCHED_EXEL_INFO)
+        :param staining: str (optional, default is 'CD8')
+            Staining ID that is searched for when generating the list of WSI files
         """
         # initiate the mandatory elements
         self.file_path = file_path
@@ -44,7 +47,7 @@ class BTPatchExtractor:
         # instantiate optional parameters
         self.coord_path = asap_xml_path
         self.overwrite = overwrite
-        self.staining = 'CD'
+        self.staining = staining
         self.level = level
         self.matched_files_excel = matched_files_excel
         self.extract_hotspot = hotspot
@@ -77,7 +80,10 @@ class BTPatchExtractor:
             if self.matched_files_excel:
                 files = self.file_path
             else:
-                files = glob.glob(os.path.join(self.file_path, f'*{self.staining}.mrxs')) + glob.glob(os.path.join(self.file_path, f'*{self.staining}.ndpi'))
+                files = glob.glob(os.path.join(self.file_path, f'*{self.staining}*.mrxs')) + glob.glob(os.path.join(self.file_path, f'*{self.staining}.ndpi'))
+            if len(files) == 0:
+                print(f'No WSIs found in folder {self.file_path}!')
+                exit(-1)
             return files
         # if we have just a single file
         elif os.path.isfile(self.file_path):
@@ -209,13 +215,12 @@ class BTPatchExtractor:
                 png = self.extract_crop(wsi_img, top_left_coord, size)
                 # save the image
                 print(f'Saving image {output_file_path}')
-                Image.fromarray(png[:, :, :3]).save_gxls(output_file_path)
+                Image.fromarray(png[:, :, :3]).save(output_file_path)
 
     def get_rectangle_info(self, asap_coord, group):
         if group == 'hotspot':
             top_left_coord = [int(i) for i in asap_coord[0]]
-            size = asap_coord[2][0] - asap_coord[0][0]
-
+            size = int(asap_coord[2][0] - asap_coord[0][0])
         elif group == 'lymphocytes':
             top_left_coord = [int(i-self.lymph_patch_size/2) for i in asap_coord]
             size = self.lymph_patch_size
@@ -271,6 +276,7 @@ class BTPatchExtractor:
         return img
 
     def parse_matched_files_excel(self) -> pd.DataFrame:
+        # TODO: this is probably not working anymore
         df = pd.read_excel(self.matched_files_excel, sheet_name=self.matched_excel_info['sheet_name'], engine='openpyxl')
         # remove two empty top lines and set third line to header
         df.columns = df.iloc[2]

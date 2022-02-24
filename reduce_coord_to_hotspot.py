@@ -121,14 +121,17 @@ def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, 
                 hotspots = all_hotspots[os.path.basename(file)]
 
                 # load the file
-                file_path = '{}_coordinates_{}.txt'.format(file, group)
-                output_txt_file = os.path.join(txt_output, os.path.basename(file_path))
+                file_path = f'{file}_coordinates_{group}.txt'
 
                 if os.path.isfile(file_path):
                     coordinates = np.loadtxt(file_path)
 
                     # iterate over hotspot files
-                    for h in hotspots:
+                    for h_ind, h in enumerate(hotspots):
+                        if len(hotspots) == 1:
+                            output_txt_file = os.path.join(txt_output, os.path.basename(file_path))
+                        else:
+                            output_txt_file = os.path.join(txt_output, f'{os.path.basename(file)}_coordinates_{group}_hotspot{h_ind}')
                         in_hotspot = [in_square(h, i) for i in coordinates]
                         coord_in_hotspot[group] = coordinates[in_hotspot]
                         to_save = coordinates[in_hotspot]

@@ -49,6 +49,7 @@ Finally, the graph-representations are saved in gxl format.
      - `--xml-hotspot-folder`: folder with the xml files of the hotspots
      - `--coordinate-txt-files-folder`: folder with the text files of the coordinates of the lymphocytes and tumor buds
      - `--output-folder`: folder where the output is saved to
+     - `--overwrite`: optional. Overrides existing files (default is False) 
    - **Output**: Contains only the detected elements within the selection.
      - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
        for the tumor buds)
@@ -57,7 +58,7 @@ Finally, the graph-representations are saved in gxl format.
        
 1. `create_gxl_files.py`: creates the graphs as gxl files TODO: update for split_json
    - **Input**:
-     - `--asap_xml_files_folder`: path to the folder with the coordinates text files
+     - `--asap_xml_files_folder`: path to the folder with the coordinates xml files
      - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 
        - `radius-x`: connect elements in radius X (in mikrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours

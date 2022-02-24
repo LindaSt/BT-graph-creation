@@ -518,7 +518,7 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
                      node_feature_csvs: str = None, split_json: str = None, other: str = None):
     """
     INPUT
-    --asap-xml-files-folder: path to the folder with the coordinates text files
+    --asap-xml-files-folder: path to the folder with the coordinates xml files
     --edge-def-tb-to-l (optional):
       - radius-x: connect elements in radius X (in mikrometer)
       - to-X-nn: connect to k closest elements where X is the number of neighbours

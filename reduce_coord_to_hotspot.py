@@ -28,12 +28,11 @@ def setup_output_folders(output_path):
 
 def in_square(square_coordinates, point):
     assert len(square_coordinates) == 4 and len(point) == 2
+    x = [i[0] for i in square_coordinates]
+    y = [i[1] for i in square_coordinates]
 
-    x_min, y_min = tuple(square_coordinates[0])
-    x_max, y_max = tuple(square_coordinates[2])
-
-    x_dim = x_min <= point[0] <= x_max
-    y_dim = y_min <= point[1] <= y_max
+    x_dim = min(x) <= point[0] <= max(x)
+    y_dim = min(y) <= point[1] <= max(y)
 
     return x_dim and y_dim
 
@@ -72,13 +71,6 @@ def parse_hotspot_xml(hotspot_xmls, txt_output):
     # read in the hotspot xml
     hotspots = read_hotspot_xmls(hotspot_xmls)
     return hotspots
-
-
-def create_asap_xmls(all_txt_files, xml_output):
-    # create the asap xml files
-    all_txt_file_names = [os.path.join(txt_output, os.path.basename(f)) for f in all_txt_files]
-    files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_file_names]))
-    create_asap_xml(files_to_process, xml_output)
 
 
 def check_output(txt_output, xml_output, all_hotspots):
@@ -131,7 +123,7 @@ def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, 
                         if len(hotspots) == 1:
                             output_txt_file = os.path.join(txt_output, os.path.basename(file_path))
                         else:
-                            output_txt_file = os.path.join(txt_output, f'{os.path.basename(file)}_coordinates_{group}_hotspot{h_ind}')
+                            output_txt_file = os.path.join(txt_output, f'{os.path.basename(file)}_hotspot{h_ind}_coordinates_{group}.txt')
                         in_hotspot = [in_square(h, i) for i in coordinates]
                         coord_in_hotspot[group] = coordinates[in_hotspot]
                         to_save = coordinates[in_hotspot]
@@ -147,7 +139,7 @@ def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, 
                 print(f'No hotspot xml for file {os.path.basename(file)}')
                 error_files.append(file)
 
-    create_asap_xmls(output_text_files, xml_output)
+    create_asap_xml(txt_output, xml_output)
 
     # make sure all the hotspots were processed and that there are three txt files for each hotspot
     check_output(txt_output, xml_output, all_hotspots.keys())

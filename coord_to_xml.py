@@ -2,37 +2,61 @@ import glob
 import os
 import numpy as np
 from lxml import etree as ET
-import argparse
 import re
+import fire
 
 
-# %%
-def create_asap_xml(files_to_process, output_folder):
-    """
-    This function takes a coordinate txt file as input and creates an xml file that can be loaded in ASAP
-    """
-    colours = {'tumorbuds': '#73d216', 'lymphocytes': '#ffaa00', 'hotspot': '#3465a4'}
+class XmlFile:
+    def __init__(self, file, output_path):
+        self.output_base_path = output_path
+        self.file = file
+        self.colors = {'tumorbuds': '#73d216', 'lymphocytes': '#ffaa00', 'hotspot': '#3465a4'}
+        self.xmls = self.create_xml_trees()
 
-    for file in files_to_process:
-        output_file = os.path.join(output_folder, '{}_asap.xml'.format(os.path.basename(file)))
-        # initiate the tree
-        xml_tree = ET.Element('ASAP_Annotations')
-        # Make the annotations and coordinates
-        xml_annotations = ET.SubElement(xml_tree, 'Annotations')
-        # Make the groups
-        xml_annotation_groups = ET.SubElement(xml_tree, 'AnnotationGroups')
-
-        for group in ['lymphocytes', 'tumorbuds', 'hotspot']:
+    def read_txt_file(self, group, suffix=''):
+        file_path = f'{self.file}_coordinates_{group}{suffix}.txt'
+        if os.path.isfile(file_path):
             # load the file
-            file_path = '{}_coordinates_{}.txt'.format(file, group)
+            coordinates = np.loadtxt(file_path)
+            return coordinates
+        else:
+            print(f'File {file_path} does not exist.')
+            return None
 
-            if os.path.isfile(file_path):
-                coordinates = np.loadtxt(file_path)
+    @property
+    def data(self):
+        hotspots = self.read_txt_file('hotspot')
+        data = {i: {'hotspot': h} for i, h in enumerate(hotspots)}
+        if len(hotspots) > 1:
+            for i in range(len(hotspots)):
+                data[i]['lymphocytes'] = self.read_txt_file('lymphocytes', suffix=f'_hotspot{i}')
+                data[i]['tumorbuds'] = self.read_txt_file('tumorbuds', suffix=f'_hotspot{i}')
+                data[i]['output_file'] = os.path.join(self.output_base_path,
+                                                      f'{os.path.basename(self.file)}_hotspot{i}_asap.xml')
+        else:
+            data[0]['lymphocytes'] = self.read_txt_file('lymphocytes')
+            data[0]['tumorbuds'] = self.read_txt_file('tumorbuds')
+            data[0]['output_file'] = os.path.join(self.output_base_path,
+                                                  '{}_asap.xml'.format(os.path.basename(self.file)))
+        return data
+
+    def create_xml_trees(self):
+        xmls = {}
+        for hotspot_ind, coord_dict in self.data.items():
+            out_file = coord_dict.pop('output_file')
+            xml_tree = ET.Element('ASAP_Annotations')
+            # Make the annotations and coordinates
+            xml_annotations = ET.SubElement(xml_tree, 'Annotations')
+            # Make the groups
+            xml_annotation_groups = ET.SubElement(xml_tree, 'AnnotationGroups')
+
+            for group, coordinates in coord_dict.items():
                 # check if file is not empty
-                if len(coordinates) > 0:
+                if coordinates is not None and len(coordinates) > 0:
                     # make the group
                     xml_group = ET.SubElement(xml_annotation_groups, 'Group',
-                                              attrib={'Name': group, 'PartOfGroup': 'None', 'Color': colours[group]})
+                                              attrib={'Name': group, 'PartOfGroup': 'None',
+                                                      'Color': self.colors[group]})
                     xml_group_attrib = ET.SubElement(xml_group, 'Attributes')
 
                     # Make the annotations and coordinates
@@ -44,7 +68,8 @@ def create_asap_xml(files_to_process, output_folder):
                         annotation_type = 'Rectangle'
                     # iterate over the list
                     for i, line in enumerate(coordinates):
-                        attrib = {'Name': 'Annotation {}'.format(i), 'PartOfGroup': group, 'Color': colours[group],
+                        attrib = {'Name': 'Annotation {}'.format(i), 'PartOfGroup': group,
+                                  'Color': self.colors[group],
                                   'Type': annotation_type}
                         if annotation_type == 'Dot':
                             xml_annotation = ET.SubElement(xml_annotations, 'Annotation', attrib)
@@ -58,28 +83,30 @@ def create_asap_xml(files_to_process, output_folder):
                             for j, tup in enumerate(coor):
                                 coor_attrib = {'Order': str(j), 'X': str(tup[0]), 'Y': str(tup[1])}
                                 xml_coordinate = ET.SubElement(xml_coordinates, 'Coordinate', attrib=coor_attrib)
+                    xmls[out_file] = ET.ElementTree(xml_tree)
+                return xmls
 
-            else:
-                print('File {} does not exist. Continuing...'.format(file_path))
-        # e = ET.dump(xml_tree)
-        e = ET.ElementTree(xml_tree).write(output_file, pretty_print=True)
+    def save_xml(self):
+        for output_file, xml_tree in self.xmls.items():
+            # e = ET.dump(xml_tree)
+            e = xml_tree.write(output_file, pretty_print=True)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--coordinates-txt-files-folder", type=str, required=True)
-    parser.add_argument("--output-folder", type=str, required=True)
-    args = parser.parse_args()
+def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, top_k: int = 10):
+    # create output folder if it does not exist
+    output_base_path = output_folder
+    if not os.path.isdir(output_base_path):
+        os.makedirs(output_base_path)
 
     # get a list of all the txt files to process
-    input_path = os.path.join(args.coordinates_txt_files_folder, r'*_coordinates_*.txt')
+    input_path = os.path.join(coordinates_txt_files_folder, r'*_coordinates_*.txt')
     all_files = glob.glob(input_path)
     files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
 
-    # create output folder if it does not exist
-    output_base_path = args.output_folder
-    if not os.path.isdir(output_base_path):
-        os.mkdir(output_base_path)
+    for file in files_to_process:
+        XmlFile(file=file, output_path=output_base_path).save_xml()
 
-    # create the xml files
-    create_asap_xml(files_to_process, output_base_path)
+
+if __name__ == '__main__':
+    fire.Fire(create_asap_xml)
+

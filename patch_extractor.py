@@ -88,6 +88,9 @@ class BTPatchExtractor:
         # if we have just a single file
         elif os.path.isfile(self.file_path):
             return [self.file_path]
+        else:
+            print(f'Folder {self.file_path} not found.')
+            exit(-1)
 
     @property
     def coord_files(self):

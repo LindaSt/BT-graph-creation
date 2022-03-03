@@ -13,8 +13,8 @@ class XmlFile:
         self.colors = {'tumorbuds': '#73d216', 'lymphocytes': '#ffaa00', 'hotspot': '#3465a4'}
         self.xmls = self.create_xml_trees()
 
-    def read_txt_file(self, group, suffix=''):
-        file_path = f'{self.file}_coordinates_{group}{suffix}.txt'
+    def read_txt_file(self, group, id=''):
+        file_path = f'{self.file}{id}_coordinates_{group}.txt'
         if os.path.isfile(file_path):
             # load the file
             coordinates = np.loadtxt(file_path)
@@ -26,11 +26,13 @@ class XmlFile:
     @property
     def data(self):
         hotspots = self.read_txt_file('hotspot')
+        if hotspots is None:
+            return {}
         data = {i: {'hotspot': h} for i, h in enumerate(hotspots)}
         if len(hotspots) > 1:
             for i in range(len(hotspots)):
-                data[i]['lymphocytes'] = self.read_txt_file('lymphocytes', suffix=f'_hotspot{i}')
-                data[i]['tumorbuds'] = self.read_txt_file('tumorbuds', suffix=f'_hotspot{i}')
+                data[i]['lymphocytes'] = self.read_txt_file('lymphocytes', id=f'_hotspot{i}')
+                data[i]['tumorbuds'] = self.read_txt_file('tumorbuds', id=f'_hotspot{i}')
                 data[i]['output_file'] = os.path.join(self.output_base_path,
                                                       f'{os.path.basename(self.file)}_hotspot{i}_asap.xml')
         else:
@@ -83,16 +85,18 @@ class XmlFile:
                             for j, tup in enumerate(coor):
                                 coor_attrib = {'Order': str(j), 'X': str(tup[0]), 'Y': str(tup[1])}
                                 xml_coordinate = ET.SubElement(xml_coordinates, 'Coordinate', attrib=coor_attrib)
-                    xmls[out_file] = ET.ElementTree(xml_tree)
-                return xmls
+            xmls[out_file] = ET.ElementTree(xml_tree)
+        return xmls
 
     def save_xml(self):
+        if self.xmls is None:
+            return
         for output_file, xml_tree in self.xmls.items():
             # e = ET.dump(xml_tree)
             e = xml_tree.write(output_file, pretty_print=True)
 
 
-def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, top_k: int = 10):
+def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, staining_id: str = 'CD8'):
     # create output folder if it does not exist
     output_base_path = output_folder
     if not os.path.isdir(output_base_path):
@@ -101,7 +105,7 @@ def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, top_k
     # get a list of all the txt files to process
     input_path = os.path.join(coordinates_txt_files_folder, r'*_coordinates_*.txt')
     all_files = glob.glob(input_path)
-    files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_files]))
+    files_to_process = list(set([re.search(repr(f'(.*{staining_id})')[1:-1], f).group(1) for f in all_files]))
 
     for file in files_to_process:
         XmlFile(file=file, output_path=output_base_path).save_xml()

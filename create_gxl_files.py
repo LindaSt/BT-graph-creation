@@ -456,10 +456,9 @@ class GxlFilesCreator:
         return common_ids_csv_process
 
     def get_graphs(self) -> list:
-        # TODO: multi-process?
         self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
-        files_dict = {os.path.basename(f)[:-16]: f for f in
-                      self.files_to_process}  # get rid of '_output_asap' at the end
+        files_dict = {os.path.basename(f)[:-9]: f for f in
+                      self.files_to_process}  # get rid of '_asap' at the end
         # TODO: ask Lars how to make this neater
         if self.spacings:
             return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id],

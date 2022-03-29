@@ -4,13 +4,13 @@ tif-overlays to manual annotation xml-files, numpy files with the coordinates an
 
 ## Why?
 The annotations of the tumor bud and lymphocyte detections are in tif format, where each of them are represented as 
-small squares (value 3 or 9). The tif image can be loaded as an overlay in ASAP.
+small squares. The tif image can be loaded as an overlay in ASAP.
  
 The coordinates on the whole slide image (WSI) of all these elements have to be extracted. We also want to be able
 to reduce the elements to a certain area (e.g. hotspot). The coordinates are saved as text files as well as xml files,
 which are compatible to be loaded in ASAP.
 
-Finally, the graph-representations are saved in gxl format.
+Finally, the graph representations are saved in gxl format.
 
 ## Files and Functionalities
 ### Convert detections to graphs (gxl files)
@@ -59,14 +59,23 @@ Finally, the graph-representations are saved in gxl format.
 1. `create_gxl_files.py`: creates the graphs as gxl files TODO: update for split_json
    - **Input**:
      - `--asap_xml_files_folder`: path to the folder with the coordinates xml files
-     - `--edge-definition-tb-to-l` and `--edge-definition-tb-to-tb` have the following options: 
-       - `radius-x`: connect elements in radius X (in mikrometer)
+     - `--edge-def-tb-to-l`, `--l-to-tb` and `--edge-def-tb-to-tb` have the following options: 
+       - `radius-x`: connect elements in radius X (in micrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
-     - `--fully-connected`: supersedes the `--edge-definition*`. Following options:
+       - `to-X-nn-cutoff-Y`: connect to k closest elements where X is the number of neighbours, if the 
+         distance between them is smaller than Y (micrometers)
+       - `to-closest`: adds edge to the closest neighbour
+       - `to-closest-cutoff-X`: adds edge to the closest neighbour, if distance is smaller than X (micrometers)
+       - `delaunay`: only works for tumor bud to tumor bud connection. Connects them based on Delaunay triangulation
+     - `--fully-connected`: supersedes the `--edge-def*`. Following options:
        - `all`: fully connected graph
        - `lymphocytes`: only the lymphocytes are fully connected
        - `tumorbuds`: only the tumorbuds are fully connected
-       - `--output-folder`: path to where output folder should be created
+     - `--other-edge-fct`: supersedes the `--edge-def*`. Following options:
+       - `hierarchical`: creates a graph where the tumor buds are fully connected, and the T-cells are 
+         connected to the closest tumor bud.
+       - `delaunay`: performs delaunay triangulation (regardless of node label)  
+     - `--output-folder`: path to where output folder should be created
      - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
        The first column needs to have the node index number. The headers will be used as the feature name.
        If there is a column named "filename", it will be dropped.

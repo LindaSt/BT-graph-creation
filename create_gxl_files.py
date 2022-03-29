@@ -8,7 +8,7 @@ from lxml import etree as ET
 import re
 import json
 
-from scipy.spatial import distance
+from scipy.spatial import distance, Delaunay
 from sklearn.neighbors import NearestNeighbors
 
 from util.file_parsing import parse_xml
@@ -20,11 +20,13 @@ class EdgeConfig:
     edge_def_tb_to_l: "radius-X" or "to-X-nn" where X is a integer --> how should tumor buds and lymphocytes be connected
     edge_def_tb_to_tb: "radius-X" or "to-X-nn" where X is a integer --> how should tumor buds be connected
     fully_connected: specify either 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def* arguments)
+    hierarchical:
     """
 
-    def __init__(self, edge_def_tb_to_l=None, edge_def_tb_to_tb=None, fully_connected=None, other=None):
+    def __init__(self, edge_def_tb_to_l=None, edge_def_l_to_tb=None, edge_def_tb_to_tb=None, fully_connected=None, other=None):
         self.edge_def_tb_to_l = self.decode(edge_def_tb_to_l)
         self.edge_def_tb_to_tb = self.decode(edge_def_tb_to_tb)
+        self.edge_def_l_to_tb = self.decode(edge_def_l_to_tb)
         self.fully_connected = fully_connected
         self.other = other
 
@@ -45,7 +47,7 @@ class EdgeConfig:
     @other.setter
     def other(self, other):
         if other is not None:
-            assert other in ['hierarchical']
+            assert other.split('-')[0] in ['hierarchical', 'delaunay']
         self._other = other
 
     @property
@@ -65,6 +67,8 @@ class EdgeConfig:
                 edge_def['tb_to_tb'] = self.edge_def_tb_to_tb
             if self.edge_def_tb_to_l and self.fully_connected != 'lymphocytes':
                 edge_def['tb_to_l'] = self.edge_def_tb_to_l
+            if self.edge_def_l_to_tb and self.fully_connected != 'lymphocytes':
+                edge_def['l_to_tb'] = self.edge_def_l_to_tb
         return edge_def
 
     @staticmethod
@@ -75,11 +79,19 @@ class EdgeConfig:
         if edge_def:
             if 'radius' in edge_def:
                 return ['radius', int(edge_def.split('-')[-1])]
+            elif '-nn-cutoff' in edge_def:
+                return ['kNN', int(edge_def.split('-')[1]), int(edge_def.split('-')[-1])]
             elif '-nn' in edge_def:
                 return ['kNN', int(edge_def.split('-')[1])]
+            elif 'closest-cutoff' in edge_def:
+                return ['to_closest', int(edge_def.split('-')[-1])]
+            elif 'closest' in edge_def:
+                return ['to_closest']
+            elif 'delaunay' in edge_def:
+                return ['delaunay']
             else:
                 print(
-                    f'Invalid input. Choose from "radius-X", "to-X-nn" and "fully-connected" (specify number instead of X)')
+                    f'Invalid input. Choose from "radius-X", "to-X-nn", "to-X-nn-cutoff-X" and "fully-connected" (specify number instead of X)')
                 sys.exit()
         else:
             return None
@@ -185,7 +197,7 @@ class Graph:
         # get all the edges
         if self.edge_config is not None and len(self.edge_config) > 0:
             for edge_type, param_list in self.edge_config.items():
-                # edge_fct can be {'fully_connected', 'tb_to_tb', 'tb_to_l', 'hierachical'}
+                # edge_fct can be {'fully_connected', 'tb_to_tb', 'tb_to_l', 'l_to_tb' 'hierachical'}
                 eval(f'self.{edge_type}')(param_list)
 
     def update_edge_dict(self, coo_matrix, edge_features, feature_name):
@@ -210,15 +222,33 @@ class Graph:
     # *********** edge insertion functions ***********
     def tb_to_l(self, param_list):
         edge_fct = param_list[0]
-        params = param_list[1:]
         # add the edges
-        eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_lymph_nodes, params)
+        if len(param_list) > 1:
+            param_list = param_list[1:]
+            eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_lymph_nodes, param_list)
+        else:
+            eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_lymph_nodes)
 
     def tb_to_tb(self, param_list):
         edge_fct = param_list[0]
-        params = param_list[1:]
         # add the edges
-        eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_tb_nodes, params)
+        if len(param_list) > 1:
+            param_list = param_list[1:]
+            eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_tb_nodes, param_list)
+        elif edge_fct == 'delaunay':
+            self.delaunay(self.xy_tb_nodes)
+        else:
+            eval(f'self.{edge_fct}')(self.xy_tb_nodes, self.xy_tb_nodes)
+
+    def l_to_tb(self, param_list):
+        edge_fct = param_list[0]
+        # add the edges
+        if len(param_list) > 1:
+            param_list = param_list[1:]
+            eval(f'self.{edge_fct}')(self.xy_lymph_nodes, self.xy_tb_nodes, param_list)
+        else:
+            # add the edges
+            eval(f'self.{edge_fct}')(self.xy_lymph_nodes, self.xy_tb_nodes)
 
     def fully_connected(self, params):
         # params should either be 'all', 'tumorbuds' or 'lymphocytes'
@@ -229,10 +259,15 @@ class Graph:
     def other_edge_fct(self, params):
         if params == 'hierarchical':
             self.hierarchical()
+        elif 'hierarchical-cutoff' in params:
+            cutoff = int(params.split('-')[-1])
+            self.hierarchical(cutoff=cutoff)
+        elif params == 'delaunay':
+            self.delaunay(self.xy_all_nodes)
 
-    def hierarchical(self):
+    def hierarchical(self, cutoff=None):
         # connect lymphocytes to closest TB
-        self.to_closest(self.xy_lymph_nodes, self.xy_tb_nodes)
+        self.to_closest(self.xy_lymph_nodes, self.xy_tb_nodes, cutoff=cutoff)
         # fully connect lymphocytes that are connected to the same bud
         tb_ids_sub_graphs = {n: [] for n in self.xy_tb_nodes.keys()}
         sub_graphs = [(int(i) for i in e.split('_')) for e in self.edge_dict.keys()]
@@ -245,6 +280,33 @@ class Graph:
             self.fully_connect({i: self.xy_lymph_nodes[i] for i in lymph_list})
         # fully connect tumorbuds
         self.fully_connected('tumorbuds')
+
+    def delaunay(self, node_dict):
+        features_dict = {}
+        points = np.array([list(i) for i in node_dict.values()])
+
+        if len(points) < 4:
+            return
+
+        tri = Delaunay(points)
+        for tr in tri.vertices:
+            for i in range(3):
+                edge_idx0 = tr[i]
+                edge_idx1 = tr[(i + 1) % 3]  # to always get the next pointidx in the triangle formed by delaunay
+                if min(node_dict.keys()) == 0:
+                    edge = tuple(sorted([edge_idx0, edge_idx1]))
+                else:
+                    edge = tuple(sorted([edge_idx0+min(node_dict.keys()), edge_idx1+min(node_dict.keys())]))
+                # check the couple of points hasn't already been visited from the other side (= starting from the other point)
+                # if yes then continue because already in the array
+                if edge in features_dict.keys():
+                    continue
+
+                features_dict[edge] = distance.euclidean(tri.points[edge_idx0], tri.points[edge_idx1])
+
+        # update the dictionary
+        self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
+                              feature_name='distance')
 
     def fully_connect(self, node_dict):
         dict_ids = list(node_dict.keys())
@@ -263,7 +325,9 @@ class Graph:
         self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
                               feature_name='distance')
 
-    def to_closest(self, from_dict, to_dict):
+    def to_closest(self, from_dict, to_dict, params=None, cutoff=None):
+        if params:
+            cutoff = params.pop()
         features_dict = {}
         # calculate the distances
         if len(from_dict) > 0 and len(to_dict) > 0:
@@ -273,7 +337,11 @@ class Graph:
                 id_t = list(to_dict.keys())[dist_list.index(d)]
                 edge = tuple(sorted([id_f, id_t]))
                 if edge not in features_dict.keys():
-                    features_dict[edge] = d
+                    if cutoff:
+                        if d < cutoff:
+                            features_dict[edge] = d
+                    else:
+                        features_dict[edge] = d
 
         # update the dictionary
         self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
@@ -291,18 +359,21 @@ class Graph:
                     if id_c == id_p:
                         continue
                     d = distance.euclidean(xy_c, xy_p)
+                    edge = tuple(sorted([id_c, id_p]))
                     # if d < x add edge
-                    if 0 < d <= x:
-                        edge = tuple(sorted([id_c, id_p]))
-                        if edge not in features_dict.keys():
-                            features_dict[edge] = d
+                    if d <= x and edge not in features_dict.keys():
+                        features_dict[edge] = d
 
         # update the dictionary
         self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
                               feature_name='distance')
 
-    def kNN(self, center_dict, perimeter_dict, k, distance_metric='euclidean'):
-        assert len(k) == 1
+    def kNN(self, center_dict, perimeter_dict, param_list, distance_metric='euclidean'):
+        # set up k
+        k = orig_k = param_list[0]
+        cutoff = None
+        if len(param_list) > 1:
+            cutoff = param_list[1]
 
         # set-up in format for NearestNeighbors
         perimeter_keys = sorted(perimeter_dict.keys())
@@ -310,8 +381,6 @@ class Graph:
         training_set = [perimeter_dict[i] for i in perimeter_keys]
         test_set = [center_dict[i] for i in center_keys]
 
-        # set up k
-        k = orig_k = k.pop()
         # if we are compare the same two sets, the first match will always be the point itself --> k += 1
         if training_set == test_set:
             k += 1
@@ -334,7 +403,10 @@ class Graph:
                     node_ind2 = perimeter_keys[ind2]
                     edge = tuple(sorted([node_ind1, node_ind2]))
                     if node_ind1 != node_ind2 and edge not in features_dict.keys():
-                        features_dict[edge] = d
+                        if cutoff is None:
+                            features_dict[edge] = d
+                        elif d <= cutoff:
+                            features_dict[edge] = d
 
         # update the dictionary
         self.update_edge_dict(coo_matrix=features_dict.keys(), edge_features=features_dict.values(),
@@ -513,13 +585,13 @@ class GxlFilesCreator:
 
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
-                     edge_def_tb_to_tb: str = None, fully_connected: str = None, spacing_json: str = None,
-                     node_feature_csvs: str = None, split_json: str = None, other: str = None):
+                     edge_def_tb_to_tb: str = None, edge_def_l_to_tb: str = None, fully_connected: str = None,
+                     spacing_json: str = None, node_feature_csvs: str = None, split_json: str = None, other: str = None):
     """
     INPUT
     --asap-xml-files-folder: path to the folder with the coordinates xml files
     --edge-def-tb-to-l (optional):
-      - radius-x: connect elements in radius X (in mikrometer)
+      - radius-x: connect elements in radius X (in micrometer)
       - to-X-nn: connect to k closest elements where X is the number of neighbours
     --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
     --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
@@ -533,7 +605,8 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     TODO: remove this: The distances are centered (xy - xy(average)).?
     """
     # get the edge definitions
-    edge_def_config = EdgeConfig(edge_def_tb_to_l, edge_def_tb_to_tb, fully_connected, other)
+    edge_def_config = EdgeConfig(edge_def_tb_to_l=edge_def_tb_to_l, edge_def_tb_to_tb=edge_def_tb_to_tb,
+                                 edge_def_l_to_tb=edge_def_l_to_tb, fully_connected=fully_connected, other=other)
 
     # read the spacing json
     if spacing_json:

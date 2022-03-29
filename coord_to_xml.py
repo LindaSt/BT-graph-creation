@@ -7,10 +7,11 @@ import fire
 
 
 class XmlFile:
-    def __init__(self, file, output_path):
+    def __init__(self, file: str, output_path: str, full: bool = False):
         self.output_base_path = output_path
         self.file = file
         self.colors = {'tumorbuds': '#73d216', 'lymphocytes': '#ffaa00', 'hotspot': '#3465a4'}
+        self.full_coord = full
         self.xmls = self.create_xml_trees()
 
     def read_txt_file(self, group, id=''):
@@ -25,26 +26,32 @@ class XmlFile:
 
     @property
     def data(self):
-        hotspots = self.read_txt_file('hotspot')
-        if hotspots is None:
-            return {}
-        data = {i: {'hotspot': h} for i, h in enumerate(hotspots)}
-        if len(hotspots) > 1:
-            for i in range(len(hotspots)):
-                data[i]['lymphocytes'] = self.read_txt_file('lymphocytes', id=f'_hotspot{i}')
-                data[i]['tumorbuds'] = self.read_txt_file('tumorbuds', id=f'_hotspot{i}')
-                data[i]['output_file'] = os.path.join(self.output_base_path,
-                                                      f'{os.path.basename(self.file)}_hotspot{i}_asap.xml')
+        data = []
+        if self.full_coord:
+            data = [{
+                'lymphocytes': self.read_txt_file('lymphocytes'),
+                'tumorbuds': self.read_txt_file('tumorbuds'),
+                'output_file': os.path.join(self.output_base_path,
+                                            '{}_full_asap.xml'.format(os.path.basename(self.file)))
+            }]
         else:
-            data[0]['lymphocytes'] = self.read_txt_file('lymphocytes')
-            data[0]['tumorbuds'] = self.read_txt_file('tumorbuds')
-            data[0]['output_file'] = os.path.join(self.output_base_path,
-                                                  '{}_asap.xml'.format(os.path.basename(self.file)))
+            hotspots = self.read_txt_file('hotspot')
+            if hotspots is None:
+                return data
+
+            if len(hotspots) > 0:
+                data = [{
+                    'hotspot': h,
+                    'lymphocytes': self.read_txt_file('lymphocytes', id=f'_hotspot{i}'),
+                    'tumorbuds': self.read_txt_file('tumorbuds', id=f'_hotspot{i}'),
+                    'output_file': os.path.join(self.output_base_path,
+                                                f'{os.path.basename(self.file)}_hotspot{i}_asap.xml')
+                } for i, h in enumerate(hotspots)]
         return data
 
     def create_xml_trees(self):
         xmls = {}
-        for hotspot_ind, coord_dict in self.data.items():
+        for coord_dict in self.data:
             out_file = coord_dict.pop('output_file')
             xml_tree = ET.Element('ASAP_Annotations')
             # Make the annotations and coordinates
@@ -96,7 +103,8 @@ class XmlFile:
             e = xml_tree.write(output_file, pretty_print=True)
 
 
-def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, staining_id: str = 'CD8'):
+def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, staining_id: str = 'CD8',
+                    full: bool = False):
     # create output folder if it does not exist
     output_base_path = output_folder
     if not os.path.isdir(output_base_path):
@@ -108,9 +116,8 @@ def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, stain
     files_to_process = list(set([re.search(repr(f'(.*{staining_id})')[1:-1], f).group(1) for f in all_files]))
 
     for file in files_to_process:
-        XmlFile(file=file, output_path=output_base_path).save_xml()
+        XmlFile(file=file, output_path=output_base_path, full=full).save_xml()
 
 
 if __name__ == '__main__':
     fire.Fire(create_asap_xml)
-

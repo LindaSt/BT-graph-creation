@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import json
 import numpy as np
+from sklearn.model_selection import StratifiedKFold, StratifiedGroupKFold
 
 
 class NpEncoder(json.JSONEncoder):
@@ -17,7 +18,7 @@ class NpEncoder(json.JSONEncoder):
 
 
 class SplitJson:
-    def __init__(self, excel_path: str, output_folder: str, endpoint_name: str, sheet_name: str = None,
+    def __init__(self, excel_path: str, output_folder: str, endpoint_name: str = 'Need resection?', sheet_name: str = None,
                     json_path: str = None, seed: str = 42, split: float = 0.4, cross_val: int = 1):
         np.random.seed(seed)
         self.output_folder = output_folder
@@ -26,6 +27,7 @@ class SplitJson:
         self.input_filename = os.path.splitext(os.path.basename(excel_path))[0]
         self.split = split
         self.cross_val = cross_val
+        self.seed = seed
 
         self.endpoints_df = (excel_path, sheet_name)
 
@@ -72,73 +74,37 @@ class SplitJson:
 
     @property
     def split_dict(self):
+        # TODO
+        return NotImplementedError
+
+    @property
+    def split_dict_cv(self):
         # get the dataset split json
         # get the data set splits, equal distribution per class and separated by patient
+        # split is either per patient or we only have one entry per patient
+        pid = np.array(self.endpoints_df['Patient-Nr'])
+        X = np.array(self.endpoints_df.index)
+        y = np.array(self.endpoints_df[self.endpoint_name], dtype=int)
+        split_dict = {int(i): {} for i in range(self.cross_val)}
 
-        # Creates the [{patient_id=patient id, class=class}] dict from the data
-        patient_id_class_pairs = [{'patient_id': patient_id, 'class': info[self.endpoint_name]} for patient_id, patient_dict in
-                 self.endpoints_dict.items() for filename, info in patient_dict.items()]
+        for i, (train_index, test_index) in enumerate(self._get_split_generator(pid, X, y)):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
 
-        # Makes a dataset split (train = 1-split, valid = 1-0.5*split, test = 1-0.5*split)
-        # Ensures an even distribution of all classes in all test sets and that each patient is only present in one subset
-        classes, patients_per_class = np.unique(np.array([i['class'] for i in patient_id_class_pairs]),
-                                                return_counts=True)
-        class_patients = {c: [i['patient_id'] for i in patient_id_class_pairs if i['class'] == c] for c in classes}
-
-        # get the indices per class on how to split into train, test and val
-        splits = {c: {subset: indices for subset, indices in self.get_indices(len(patients), split=self.split).items()} for
-                            c, patients in class_patients.items()}
-        splits_per_class = {c: {subset: [patients[i] for i in indices] for subset, indices in self.get_indices(len(patients), split=self.split).items()} for
-                            c, patients in class_patients.items()}
-
-        # get the list of the filename and the class for each split
-        split_dict = {'train': {}, 'val': {}, 'test': {}}
-        for class_id, subset_list in splits_per_class.items():
-            for subset, file_list in subset_list.items():
-                split_dict[subset][str(class_id)] = file_list
-                # d = {f: class_id for f in file_list}
-                # split_dict[subset] = {**split_dict[subset], **d}
-
+            filename_per_class = {int(c): [] for c in np.unique(y_test)}
+            for c, filename in zip(y_test, X_test):
+                filename_per_class[c].append(filename)
+            split_dict[i] = filename_per_class
         return split_dict
 
-    @staticmethod
-    def get_indices(nb_elements, split=0.4):
-        """
-        returns a list of indices
-        """
-        rand = np.random.permutation(nb_elements)
-        assert len(rand) > 3
-        test_val_size = max(int(nb_elements * split / 2), 1)  # ensure that at least 1 element is present
-
-        test_ind = rand[-test_val_size:]
-        val_ind = rand[-2 * test_val_size:-test_val_size]
-        train_ind = rand[:-2 * test_val_size]
-
-        return {'train': train_ind, 'val': val_ind, 'test': test_ind}
-
-    def get_file_class_pairs_per_split(self, data, patients_splits_dict, endpoint):
-        """
-        makes the filename and class list for each split
-        """
-        all_pairs = {'train': [], 'val': [], 'test': []}
-
-        for c, patient_id_tup in patients_splits_dict.items():
-            data_subsets = [{pat_id: data[pat_id] for pat_id in pat_id_list} for pat_id_list in patient_id_tup]
-            for subset_name, subset in zip(['train', 'val', 'test'], data_subsets):
-                all_pairs[subset_name] += self.get_file_class_pairs(subset, endpoint)
-
-        return all_pairs
-
-    @staticmethod
-    def get_file_class_pairs(patients, endpoint_var):
-        """
-        Creates the [{file=filename, class=class}] dict from the data
-        """
-        # pairs = []
-        # for patient_id, patient_dict in patients.items():
-        #     for filename, info in patient_dict.items():
-        #         pairs.append({'file': f'{filename}.gxl', 'class': info[endpoint_var]})
-        return {f'{filename}.gxl': info[endpoint_var] for patient_id, patient_dict in patients.items() for filename, info in patient_dict.items()}
+    def _get_split_generator(self, pid, X, y):
+        if np.unique(pid).size == len(pid):
+            skf = StratifiedKFold(n_splits=self.cross_val, random_state=self.seed, shuffle=True)
+            split_generator = skf.split(X, y)
+        else:
+            gkf = StratifiedGroupKFold(n_splits=self.cross_val, random_state=self.seed, shuffle=True)
+            split_generator = gkf.split(X, y, groups=pid)
+        return split_generator
 
     def save_endpoint_jsons(self):
         # save the json
@@ -146,7 +112,10 @@ class SplitJson:
             json.dump(self.endpoints_dict, fp, indent=4, cls=NpEncoder)
 
         with open(os.path.join(self.output_folder, f'{self.input_filename}-split.json'), 'w') as fp:
-            json.dump(self.split_dict, fp, indent=4, cls=NpEncoder)
+            if self.cross_val > 1:
+                json.dump(self.split_dict_cv, fp, indent=4, cls=NpEncoder)
+            else:
+                json.dump(self.split_dict, fp, indent=4, cls=NpEncoder)
 
 
 if __name__ == '__main__':
@@ -156,7 +125,7 @@ if __name__ == '__main__':
     --output-path: where the json files should be saved to
     --excel-path: path to the excel with the data
     --sheet-name: (optional) name of the excel sheet that contains the data
-    --endpoint-name: name of the column that should be used as an end-point --> comma separated if multiple
+    --endpoint-name: name of the column that should be used as an end-point
     --json-path: (optional) json file that should be extended
     --cross-val: (option) how many cross validation splits should be made (default is 1)
     
@@ -188,6 +157,15 @@ if __name__ == '__main__':
         test:
             endpoint value: [Filename-ID, ...]
             ...
+            
+    or if with cross validation            
+        0:
+            endpoint value: [Filename-ID, ...]
+            ...
+        1:
+            endpoint value: [Filename-ID, ...]
+            ...
+        ...
     """
     #TODO: add asserts to make sure no data is lost
     fire.Fire(SplitJson)

@@ -18,13 +18,14 @@ class NpEncoder(json.JSONEncoder):
 
 class SplitJson:
     def __init__(self, excel_path: str, output_folder: str, endpoint_name: str, sheet_name: str = None,
-                    json_path: str = None, seed: str = 42, split: float = 0.4):
+                    json_path: str = None, seed: str = 42, split: float = 0.4, cross_val: int = 1):
         np.random.seed(seed)
         self.output_folder = output_folder
         self.endpoint_name = endpoint_name
         self.json_path = json_path
         self.input_filename = os.path.splitext(os.path.basename(excel_path))[0]
         self.split = split
+        self.cross_val = cross_val
 
         self.endpoints_df = (excel_path, sheet_name)
 
@@ -39,7 +40,12 @@ class SplitJson:
     def endpoints_df(self, path_sheet):
         excel_path, sheet_name = path_sheet
         df = pd.read_excel(excel_path, sheet_name=sheet_name, engine='openpyxl')
-        df.set_index('Algo coordinates text file ID', inplace=True)
+
+        df.drop(df[df.Excluded == True].index, inplace=True)
+        df.drop(df[df['Exclude for BTS'] == 'x'].index, inplace=True)
+        df.drop(df[df['CD8 ID'] == 'na'].index, inplace=True)
+
+        df.set_index('CD8 filename', inplace=True)
         self._endpoints = df
 
     @property
@@ -52,9 +58,11 @@ class SplitJson:
         else:
             endpoints_dict = {}
         for filename in self.endpoints_df.index:
-            patient_id = self.endpoints_df.at[filename, 'Filename-ID']
+            patient_id = self.endpoints_df.at[filename, 'CD8 ID']
+            patient_nr = self.endpoints_df.at[filename, 'Patient-Nr']
             d = {self.endpoint_name: int(self.endpoints_df.at[filename, self.endpoint_name]),
-                 'Folder': self.endpoints_df.at[filename, 'Folder']}
+                 'CD8 folder': self.endpoints_df.at[filename, 'CD8 folder'],
+                 'patient-nr': patient_nr}
             if patient_id in endpoints_dict:
                 endpoints_dict[str(patient_id)].update({filename: d})
             else:
@@ -135,10 +143,10 @@ class SplitJson:
     def save_endpoint_jsons(self):
         # save the json
         with open(os.path.join(self.output_folder, f'{self.input_filename}-all.json'), 'w') as fp:
-            json.dump(self.endpoints_dict, fp, indent=4)
+            json.dump(self.endpoints_dict, fp, indent=4, cls=NpEncoder)
 
         with open(os.path.join(self.output_folder, f'{self.input_filename}-split.json'), 'w') as fp:
-            json.dump(self.split_dict, fp, indent=4)
+            json.dump(self.split_dict, fp, indent=4, cls=NpEncoder)
 
 
 if __name__ == '__main__':
@@ -150,21 +158,24 @@ if __name__ == '__main__':
     --sheet-name: (optional) name of the excel sheet that contains the data
     --endpoint-name: name of the column that should be used as an end-point --> comma separated if multiple
     --json-path: (optional) json file that should be extended
+    --cross-val: (option) how many cross validation splits should be made (default is 1)
     
     Excel is expected to have the following columns:
-    - 'Algo coordinates text file ID': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
-    - 'Folder: folder where the slide is saved
-    - 'Filename-ID': first part of the filename (e.g patient1)
+    - 'CD8 filename': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
+    - 'CD8 folder: folder where the slide is saved
+    - 'CD8 ID': first part of the filename (e.g patient1)
+    - 'Patient-Nr': anonymized patient number
     - A column named after the --endpoint argument, e.g.
         'Need resection?'
-           0 : No (0 in TNM stage / only follow up (>= 2 years), no recurrence)
-           1 : True (1 in TNM stage, only follow up (>= 2 years) with recurrence)
+           0 : No (0 in TNM stage / follow up (>= 2 years), no recurrence)
+           1 : True (1 in TNM stage / follow up (>= 2 years) with recurrence)
            
     OUTPUT:
     json file with all files with structure
         Filename-ID:
-            Algo coordinates text file ID:
-                folder: Folder
+            CD8 filename:
+                folder: CD8 Folder
+                patient-nr: Patient-Nr
                 endpoint: endpoint value
     
     json file dataset split with structure

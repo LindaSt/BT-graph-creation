@@ -183,7 +183,12 @@ class Graph:
         # add the node features from the csv file, if present
         node_dict = {**self.lymph_nodes, **self.tb_nodes}
         if self.node_feature_csv is not None:
-            node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in
+            print(self.file_id)
+            if len(self.node_feature_csv) == 0:
+                print(f'No node features present in csv file for {self.file_id}. Skipping file.')
+                return {}
+            else:
+                node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in
                          node_dict.items()}
         return node_dict
 
@@ -503,20 +508,20 @@ class GxlFilesCreator:
     def matched_csv(self, node_feature_csvs):
         self._matched_csv = None
         if node_feature_csvs:
-            file_ids = [os.path.basename(f).split('_output')[0] for f in self.files_to_process]
+            file_ids = [os.path.basename(f).split('_asap')[0] for f in self.files_to_process]
             self._matched_csv = {file_id: csv for file_id in file_ids for csv in node_feature_csvs if file_id in csv}
 
     def check_files(self):
         # remove files that don't have a matching spacing and csv entry from self.files_to_process, and vice versa
-        file_ids_process = [os.path.basename(f).split('_output')[0] for f in self.files_to_process]
-        common_ids = set(file_ids_process)
+        file_ids_process = [os.path.basename(f).split('_asap')[0] for f in self.files_to_process]
         if self.matched_csv is not None:
-            common_ids = self._match_and_diff(set(self.matched_csv.keys()), common_ids)
+            common_ids = self._match_and_diff(set(self.matched_csv.keys()), set(file_ids_process))
+            self.files_to_process = [f for f in self.files_to_process if
+                                     os.path.basename(f).split('_asap')[0] in set(common_ids)]
         if self.spacings is not None:
-            common_ids = self._match_and_diff(set(self.spacings.keys()), common_ids)
-        # update the lists/dictionaries
-        self.files_to_process = [f for f in self.files_to_process if
-                                 os.path.basename(f).split('_output')[0] in common_ids]
+            common_ids = self._match_and_diff(set(self.spacings.keys()), set(file_ids_process))
+            self.files_to_process = [f for f in self.files_to_process if
+                                     os.path.basename(f).split('_asap')[0] in set(common_ids)]
         if self.matched_csv is not None:
             self._matched_csv = {file_id: csv for file_id, csv in self.matched_csv.items() if file_id in common_ids}
         if self.spacings is not None:
@@ -529,8 +534,7 @@ class GxlFilesCreator:
 
     def get_graphs(self) -> list:
         self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
-        files_dict = {os.path.basename(f)[:-9]: f for f in
-                      self.files_to_process}  # get rid of '_asap' at the end
+        files_dict = {os.path.basename(f)[:-9]: f for f in self.files_to_process}  # get rid of '_asap' at the end
         # TODO: ask Lars how to make this neater
         if self.spacings:
             return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id],
@@ -586,27 +590,43 @@ class GxlFilesCreator:
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
                      edge_def_tb_to_tb: str = None, edge_def_l_to_tb: str = None, fully_connected: str = None,
-                     spacing_json: str = None, node_feature_csvs: str = None, split_json: str = None, other: str = None):
+                     spacing_json: str = None, node_feature_csvs: str = None, split_json: str = None,
+                     other_edge_fct: str = None):
     """
     INPUT
-    --asap-xml-files-folder: path to the folder with the coordinates xml files
-    --edge-def-tb-to-l (optional):
-      - radius-x: connect elements in radius X (in micrometer)
-      - to-X-nn: connect to k closest elements where X is the number of neighbours
-    --edge-def-tb-to-tb (optional): same options as edge-def-tb-to-l
-    --fully-connected: (optional) specify 'all', 'tumorbuds' or 'lymphocytes' ('all' supersedes the other --edge-def... arguments)
-    --spacing-json: (optional) Path to json file that contains the spacing for each whole slide image. It is needed to compute the distance between elements.
-    --output-folder: path to where output folder should be created
-    --node-feature-csvs: path to folder with csv files with additional node features (e.g. ImageNet features)
-    --split-json: path to a json file with the dataset splits (per patient, created by make_dataset_split.json)
-
+     - `--asap_xml_files_folder`: path to the folder with the coordinates xml files
+     - `--edge-def-tb-to-l`, `--l-to-tb` and `--edge-def-tb-to-tb` have the following options:
+       - `radius-x`: connect elements in radius X (in micrometer)
+       - `to-X-nn`: connect to k closest elements where X is the number of neighbours
+       - `to-X-nn-cutoff-Y`: connect to k closest elements where X is the number of neighbours, if the
+         distance between them is smaller than Y (micrometers)
+       - `to-closest`: adds edge to the closest neighbour
+       - `to-closest-cutoff-X`: adds edge to the closest neighbour, if distance is smaller than X (micrometers)
+       - `delaunay`: only works for tumor bud to tumor bud connection. Connects them based on Delaunay triangulation
+     - `--fully-connected`: supersedes the `--edge-def*`. Following options:
+       - `all`: fully connected graph
+       - `lymphocytes`: only the lymphocytes are fully connected
+       - `tumorbuds`: only the tumorbuds are fully connected
+     - `--other-edge-fct`: supersedes the `--edge-def*`. Following options:
+       - `hierarchical`: creates a graph where the tumor buds are fully connected, and the T-cells are
+         connected to the closest tumor bud.
+       - `delaunay`: performs delaunay triangulation (regardless of node label)
+     - `--output-folder`: path to where output folder should be created
+     - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
+       The first column needs to have the node index number. The headers will be used as the feature name.
+       If there is a column named "filename", it will be dropped.
+     - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image.
+     It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0
+       for the slide scanner used in this project)
+       
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
     TODO: remove this: The distances are centered (xy - xy(average)).?
     """
     # get the edge definitions
     edge_def_config = EdgeConfig(edge_def_tb_to_l=edge_def_tb_to_l, edge_def_tb_to_tb=edge_def_tb_to_tb,
-                                 edge_def_l_to_tb=edge_def_l_to_tb, fully_connected=fully_connected, other=other)
+                                 edge_def_l_to_tb=edge_def_l_to_tb, fully_connected=fully_connected,
+                                 other=other_edge_fct)
 
     # read the spacing json
     if spacing_json:
@@ -628,8 +648,11 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
 
     # get a list of the csv files
     if node_feature_csvs is not None:
-        node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
-
+        if os.path.isdir(node_feature_csvs):
+            node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
+        else:
+            print(f'Folder {node_feature_csvs} with node feature csv does not exist. Exiting.')
+            sys.exit(-1)
     # Create the gxl files
     gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
                                 node_feature_csvs=node_feature_csvs)

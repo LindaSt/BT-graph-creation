@@ -38,8 +38,15 @@ class XmlFile:
             hotspots = self.read_txt_file('hotspot')
             if hotspots is None:
                 return data
-
-            if len(hotspots) > 0:
+            elif len(hotspots.shape) == 1:  # we have one hotspot
+                data = [{
+                    'hotspot': hotspots,
+                    'lymphocytes': self.read_txt_file('lymphocytes'),
+                    'tumorbuds': self.read_txt_file('tumorbuds'),
+                    'output_file': os.path.join(self.output_base_path,
+                                                f'{os.path.basename(self.file)}_asap.xml')
+                }]
+            elif len(hotspots.shape) > 1:  # we have more than one hotspot present
                 data = [{
                     'hotspot': h,
                     'lymphocytes': self.read_txt_file('lymphocytes', id=f'_hotspot{i}'),

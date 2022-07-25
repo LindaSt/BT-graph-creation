@@ -27,12 +27,13 @@ Finally, the graph representations are saved in gxl format.
      - Two text files per WSI: one file each for the tumor buds and the lymphocytes with the coordinates.
      - Json file: contains the spacing for each WSI.
 
-1. `coord_to_xml.py`: Creates an ASAP-xml file from the coordinate text files
+1. `coord_to_xml.py`: Creates an ASAP-xml file from the coordinate text files (and reducing it to the hotspot)
    - **Input**:
      - `--coordinates-txt-files-folder`: folder with the text files of the coordinates for 
       'lymphocytes', 'tumorbuds' or 'hotspot'(one file per annotation, 
         e.g. output of `tif_annotations_to_numpy.py`).
      - `--output-folder`: folder where the output is saved to.
+     - `--full`: full text file is converted (hotspot text files are not considered)  
    - **Output**:
      - One xml file per WSI that can be loaded in ASAP.
 
@@ -59,7 +60,7 @@ Finally, the graph representations are saved in gxl format.
 1. `create_gxl_files.py`: creates the graphs as gxl files TODO: update for split_json
    - **Input**:
      - `--asap_xml_files_folder`: path to the folder with the coordinates xml files
-     - `--edge-def-tb-to-l`, `--l-to-tb` and `--edge-def-tb-to-tb` have the following options: 
+     - `--edge-def-tb-to-l`, `--edge-def-l-to-tb` and `--edge-def-tb-to-tb` have the following options: 
        - `radius-x`: connect elements in radius X (in micrometer)
        - `to-X-nn`: connect to k closest elements where X is the number of neighbours
        - `to-X-nn-cutoff-Y`: connect to k closest elements where X is the number of neighbours, if the 
@@ -73,7 +74,7 @@ Finally, the graph representations are saved in gxl format.
        - `tumorbuds`: only the tumorbuds are fully connected
      - `--other-edge-fct`: supersedes the `--edge-def*`. Following options:
        - `hierarchical`: creates a graph where the tumor buds are fully connected, and the T-cells are 
-         connected to the closest tumor bud.
+         connected to the closest tumor bud, and then fully connected per bud.
        - `delaunay`: performs delaunay triangulation (regardless of node label)  
      - `--output-folder`: path to where output folder should be created
      - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
@@ -107,7 +108,7 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
 
 ### Create dataset split(s)
 
-1. `make_endpoint_json.py`: sets up json dictionary based on an excel file
+1. `make_datasplit_json.py`: sets up json dictionary based on an excel file
    - **Input**:
      - `--output-path`: where the json files should be saved to
      - `--excel-path`: path to the excel with the data
@@ -115,15 +116,15 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
      - `--endpoints`: name(s) of the column that should be used as an end-point --> comma separated if multiple
      - `--json-path`: (optional) json file that should be extended
     
-     The excel file is expected to have the following columns:
-     - filename: name of the slide file (e.g. patient1.mrxs)
-     - folder: folder where the slide is saved
-     - Patient-ID: first part of the filename (e.g patient1)
-     - A column(s) named after the `--endpoints` argument, e.g. N group:<br />
-       >  0 : N0 in TNM stage<br />
-          1 : N1 in TNM stage<br />
-          2 : only follow up (>= 2 years), no recurrence<br />
-          3 : only follow up (>= 2 years) with recurrence
+    Excel is expected to have the following columns:
+    - 'CD8 filename': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
+    - 'CD8 folder: folder where the slide is saved
+    - 'CD8 ID': first part of the filename (e.g patient1)
+    - 'Patient-Nr': anonymized patient number
+    - A column named after the --endpoint argument, e.g.
+        'Need resection?'
+           0 : No (0 in TNM stage / follow up (>= 2 years), no recurrence)
+           1 : True (1 in TNM stage / follow up (>= 2 years) with recurrence)
            
    - **Input**:
      - json file with structure:
@@ -227,5 +228,5 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
 ## Installation requirements
 Install the conda environment with `conda env create -f environment.yml`. 
 
-Additionally you need to install [ASAP](https://github.com/computationalpathologygroup/ASAP), if you want
+Additionally, you need to install [ASAP](https://github.com/computationalpathologygroup/ASAP), if you want
 to use the `extract_coord_from_tiff.py` script.

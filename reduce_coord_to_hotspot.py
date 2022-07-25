@@ -165,11 +165,18 @@ if __name__ == '__main__':
 
     coor_txt_files_path = os.path.join(args.coordinate_txt_files, r'*_coordinates_*.txt')
     all_txt_files = glob.glob(coor_txt_files_path)
-    txt_files_to_process = list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))
+    txt_files_to_process = {os.path.basename(file): file for file in list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))}
 
     # get the hotspots (dict)
-    hotspot_files = [os.path.join(hotspot_path, f'{os.path.basename(f)}.xml') for f in txt_files_to_process]
+    set([os.path.basename(f) for f in txt_files_to_process])
+    all_hotspot_ids = set([str.split(os.path.basename(f), '.xml')[0] for f in
+                           glob.glob(os.path.join(hotspot_path, '*.xml'))])
+    matched = all_hotspot_ids.intersection(set(txt_files_to_process.keys()))
+    unmatched = all_hotspot_ids.symmetric_difference(set(txt_files_to_process.keys()))
+    print(f'Following file-ids could not be matched (no corresponding hotspot or txt file): {unmatched}')
+    hotspot_files = [os.path.join(hotspot_path, f'{f}.xml') for f in matched]
     hotspots = parse_hotspot_xml(hotspot_files, txt_output)
 
+    txt_files_to_process = [f for name, f in txt_files_to_process.items() if name in matched]
     # create the hotspot asap and txt files
     create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, hotspots, args.overwrite)

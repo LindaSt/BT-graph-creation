@@ -10,7 +10,7 @@ import fire
 def split_dataset(split_json: str, gxl_folder_path: str, output_path: str = None):
     with open(split_json) as data_file:
         datasplit_dict = json.load(data_file)
-    file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
+    file_id_to_folder = {os.path.basename(file_id).split('_')[0]: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in d.items()
                          for file_id in file_ids}
 
     # set up the folder structure
@@ -34,7 +34,6 @@ def split_dataset(split_json: str, gxl_folder_path: str, output_path: str = None
         except KeyError:
             print(f'Patient ID {pid} not found in json file')
             continue
-
 
 if __name__ == '__main__':
     fire.Fire(split_dataset)

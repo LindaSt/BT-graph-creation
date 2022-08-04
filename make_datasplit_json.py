@@ -19,7 +19,7 @@ class NpEncoder(json.JSONEncoder):
 
 class SplitJson:
     def __init__(self, excel_path: str, output_folder: str, endpoint_name: str = 'Need resection?', sheet_name: str = None,
-                    json_path: str = None, seed: str = 42, split: float = 0.4, cross_val: int = 1):
+                    json_path: str = None, seed: str = 42, split: float = 0.4, cross_val: int = 1, multiple_hotspots=None):
         np.random.seed(seed)
         self.output_folder = output_folder
         self.endpoint_name = endpoint_name
@@ -28,6 +28,7 @@ class SplitJson:
         self.split = split
         self.cross_val = cross_val
         self.seed = seed
+        self.multiple_hotspots = multiple_hotspots
 
         self.endpoints_df = (excel_path, sheet_name)
 
@@ -70,11 +71,17 @@ class SplitJson:
             else:
                 endpoints_dict[str(patient_id)] = {filename: d}
 
-        return endpoints_dict
+        if self.multiple_hotspots is None:
+            return endpoints_dict
+        else:
+            multiple_hs_dict = {}
+            for file_id, fileinfo_d in endpoints_dict.items():
+                multiple_hs_dict[file_id] = {f'{fname}_hotspot{i}': info for fname, info in fileinfo_d.items() for i in range(self.multiple_hotspots)}
+            return multiple_hs_dict
 
     @property
     def split_dict(self):
-        # TODO
+        # TODO implement
         return NotImplementedError
 
     @property
@@ -93,7 +100,10 @@ class SplitJson:
 
             filename_per_class = {int(c): [] for c in np.unique(y_test)}
             for c, filename in zip(y_test, X_test):
-                filename_per_class[c].append(filename)
+                if self.multiple_hotspots is None:
+                    filename_per_class[c].append(filename)
+                else:
+                    filename_per_class[c] = filename_per_class[c] + [f'{filename}_hotspot{i}' for i in range(self.multiple_hotspots)]
             split_dict[i] = filename_per_class
         return split_dict
 
@@ -108,10 +118,14 @@ class SplitJson:
 
     def save_endpoint_jsons(self):
         # save the json
-        with open(os.path.join(self.output_folder, f'{self.input_filename}-all.json'), 'w') as fp:
+        if self.multiple_hotspots is None:
+            json_filename = self.input_filename
+        else:
+            json_filename = f'{self.input_filename}-hotspot-top{self.multiple_hotspots}'
+        with open(os.path.join(self.output_folder, f'{json_filename}-all.json'), 'w') as fp:
             json.dump(self.endpoints_dict, fp, indent=4, cls=NpEncoder)
 
-        with open(os.path.join(self.output_folder, f'{self.input_filename}-split.json'), 'w') as fp:
+        with open(os.path.join(self.output_folder, f'{json_filename}-split.json'), 'w') as fp:
             if self.cross_val > 1:
                 json.dump(self.split_dict_cv, fp, indent=4, cls=NpEncoder)
             else:
@@ -128,6 +142,8 @@ if __name__ == '__main__':
     --endpoint-name: name of the column that should be used as an end-point
     --json-path: (optional) json file that should be extended
     --cross-val: (option) how many cross validation splits should be made (default is 1)
+    --seed: (option) set a seed (default is 42)
+    --multiple_hotspots: (optional) set number, if multiple hotspots are present per slide
     
     Excel is expected to have the following columns:
     - 'CD8 filename': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)

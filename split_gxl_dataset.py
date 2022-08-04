@@ -1,5 +1,3 @@
-# TODO add to Readme
-
 import json
 import os
 import glob

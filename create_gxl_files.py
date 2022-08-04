@@ -23,7 +23,8 @@ class EdgeConfig:
     hierarchical:
     """
 
-    def __init__(self, edge_def_tb_to_l=None, edge_def_l_to_tb=None, edge_def_tb_to_tb=None, fully_connected=None, other=None):
+    def __init__(self, edge_def_tb_to_l=None, edge_def_l_to_tb=None, edge_def_tb_to_tb=None, fully_connected=None,
+                 other=None):
         self.edge_def_tb_to_l = self.decode(edge_def_tb_to_l)
         self.edge_def_tb_to_tb = self.decode(edge_def_tb_to_tb)
         self.edge_def_l_to_tb = self.decode(edge_def_l_to_tb)
@@ -156,7 +157,7 @@ class Graph:
     @property
     def hotspot_coordinates(self) -> list:
         # get the hotspot coordinates
-        return self.xml_data['hotspot'][0]
+        return np.array(self.xml_data['hotspot'][0])
 
     # *********** setting up the nodes ***********
     def get_group_node_dict(self, group, offset=0) -> dict:
@@ -173,7 +174,8 @@ class Graph:
     def _convert_coord(self, coordinates):
         assert len(coordinates) == 2
         # adjust x and y to make relative to the hot-spot coordinates.
-        coord = np.array([coordinates[i] - self.hotspot_coordinates[0][i] for i in [0, 1]])
+        coord = np.array([coordinates[0] - min(self.hotspot_coordinates[:, 0]),
+                          coordinates[1] - min(self.hotspot_coordinates[:, 1])])
         assert min(coord) >= 0
         if self.spacing:
             coord *= self.spacing
@@ -189,7 +191,7 @@ class Graph:
                 return {}
             else:
                 node_dict = {node_id: {**features, **self.node_feature_csv[node_id]} for node_id, features in
-                         node_dict.items()}
+                             node_dict.items()}
         return node_dict
 
     # *********** adding edges ***********
@@ -301,7 +303,7 @@ class Graph:
                 if min(node_dict.keys()) == 0:
                     edge = tuple(sorted([edge_idx0, edge_idx1]))
                 else:
-                    edge = tuple(sorted([edge_idx0+min(node_dict.keys()), edge_idx1+min(node_dict.keys())]))
+                    edge = tuple(sorted([edge_idx0 + min(node_dict.keys()), edge_idx1 + min(node_dict.keys())]))
                 # check the couple of points hasn't already been visited from the other side (= starting from the other point)
                 # if yes then continue because already in the array
                 if edge in features_dict.keys():
@@ -477,7 +479,7 @@ class GxlFilesCreator:
     """
 
     def __init__(self, files_to_process: list, edge_config: EdgeConfig, spacings: dict = None, normalize: bool = False,
-                 node_feature_csvs: str = None):
+                 node_feature_csvs: str = None, datasplit_dict: dict = None):
         """
         files_to_process: list of paths to the files that should be processed
         spacings: dictionary that contains the spacing for each WSI (read from the spacing.json)
@@ -490,15 +492,7 @@ class GxlFilesCreator:
         self.normalize = normalize
         self.matched_csv = node_feature_csvs
         self.invalid_files = []
-
-        self.graphs = self.get_graphs()
-
-    @property
-    def gxl_trees(self) -> dict:
-        """
-        creates dictionary {file_id: xml-tree}
-        """
-        return {graph.file_id: graph.get_gxl() for graph in self.graphs}
+        self.datasplit_dict = datasplit_dict
 
     @property
     def matched_csv(self) -> dict:
@@ -532,46 +526,53 @@ class GxlFilesCreator:
         self.invalid_files += sorted(list(set(set1).symmetric_difference(set(set2))))
         return common_ids_csv_process
 
-    def get_graphs(self) -> list:
-        self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
-        files_dict = {os.path.basename(f)[:-9]: f for f in self.files_to_process}  # get rid of '_asap' at the end
+    def get_xml(self, file_id, file_path):
+        return self.get_graph(file_id, file_path).get_gxl()
+
+    def get_graph(self, file_id, file_path):
         # TODO: ask Lars how to make this neater
         if self.spacings:
-            return [Graph(file_id=file_id, file_path=files_path, spacing=self.spacings[file_id],
+            return Graph(file_id=file_id, file_path=file_path, spacing=self.spacings[file_id],
                           edge_config=self.edge_config, csv_path=self.matched_csv[file_id])
-                    for file_id, files_path in files_dict.items()]
         else:
             if self.matched_csv:
-                return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config,
+                return Graph(file_id=file_id, file_path=file_path, edge_config=self.edge_config,
                               csv_path=self.matched_csv[file_id])
-                        for file_id, files_path in files_dict.items()]
             else:
-                return [Graph(file_id=file_id, file_path=files_path, edge_config=self.edge_config)
-                        for file_id, files_path in files_dict.items()]
+                return Graph(file_id=file_id, file_path=file_path, edge_config=self.edge_config)
 
-    def save_gxls(self, output_folder: str, datasplit_dict: dict = None):
+    def save_gxls(self, output_folder: str):
         # create output folder if it does not exist
         subfolder = str(self.edge_config) if self.edge_config else 'no_edges'
         output_path = os.path.join(output_folder, subfolder)
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
-        if datasplit_dict is not None:
-            folders_to_create = [os.path.join(output_path, split, cls) for split, d in datasplit_dict.items() for cls in
+        if self.datasplit_dict is not None:
+            folders_to_create = [os.path.join(output_path, split, cls) for split, d in self.datasplit_dict.items() for cls in
                                  d.keys()]
             _ = [os.makedirs(p) for p in folders_to_create if not os.path.isdir(p)]
 
         # save the xml trees
         print(f'Saving gxl files to {output_path}')
-        if datasplit_dict is not None:
-            file_id_to_folder = {file_id: [split, cls] for split, d in datasplit_dict.items() for cls, file_ids in
+        if self.datasplit_dict is not None:
+            file_id_to_folder = {file_id: [split, cls] for split, d in self.datasplit_dict.items() for cls, file_ids in
                                  d.items()
                                  for file_id in file_ids}
-        for file_id, xml_tree in self.gxl_trees.items():
-            if datasplit_dict is None:
+        # process the graphs
+        self.check_files()  # make sure we only have files that have a corresponding csv / spacing (if provided)
+        files_dict = {os.path.basename(f)[:-9]: f for f in self.files_to_process}  # get rid of '_asap' at the end
+        # remove files that are not in the datasplit dict
+        if self.datasplit_dict is not None:
+            files_dict = {f_id: path for f_id, path in files_dict.items() if f_id in file_id_to_folder.keys()}
+
+        for file_id, file_path in files_dict.items():
+            xml_tree = self.get_xml(file_id, file_path)
+
+            if self.datasplit_dict is None:
                 outfolder = output_path
             else:
                 try:
-                    outfolder = os.path.join(output_path, "/".join(file_id_to_folder[file_id.split('_')[0]]))
+                    outfolder = os.path.join(output_path, "/".join(file_id_to_folder[file_id]))
                 except KeyError:
                     self.invalid_files.append(file_id)
                     continue
@@ -646,17 +647,6 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
         print(f'No files found to process! Exiting...')
         sys.exit(-1)
 
-    # get a list of the csv files
-    if node_feature_csvs is not None:
-        if os.path.isdir(node_feature_csvs):
-            node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
-        else:
-            print(f'Folder {node_feature_csvs} with node feature csv does not exist. Exiting.')
-            sys.exit(-1)
-    # Create the gxl files
-    gxl_files = GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
-                                node_feature_csvs=node_feature_csvs)
-
     # read the split json (if present)
     if split_json is not None:
         with open(split_json) as data_file:
@@ -664,8 +654,18 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
     else:
         datasplit_dict = None
 
-    # save the gxl files
-    gxl_files.save_gxls(output_folder, datasplit_dict=datasplit_dict)
+    # get a list of the csv files
+    if node_feature_csvs is not None:
+        if os.path.isdir(node_feature_csvs):
+            node_feature_csvs = glob.glob(os.path.join(node_feature_csvs, '*.csv'))
+        else:
+            print(f'Folder {node_feature_csvs} with node feature csv does not exist. Exiting.')
+            sys.exit(-1)
+
+    # Create the gxl files
+    GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
+                    node_feature_csvs=node_feature_csvs, datasplit_dict=datasplit_dict).save_gxls(
+        output_folder=output_folder)
 
 
 if __name__ == '__main__':

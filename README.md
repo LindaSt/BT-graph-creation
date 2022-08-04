@@ -73,8 +73,8 @@ Finally, the graph representations are saved in gxl format.
        - `lymphocytes`: only the lymphocytes are fully connected
        - `tumorbuds`: only the tumorbuds are fully connected
      - `--other-edge-fct`: supersedes the `--edge-def*`. Following options:
-       - `hierarchical`: creates a graph where the tumor buds are fully connected, and the T-cells are 
-         connected to the closest tumor bud, and then fully connected per bud.
+       - `hierarchical` / `hierarchical-cutoff-X`: creates a graph where the tumor buds are fully connected, and the T-cells are 
+         connected to the closest tumor bud, and then fully connected per bud. A cutoff can be specified as X (in micrometers)
        - `delaunay`: performs delaunay triangulation (regardless of node label)  
      - `--output-folder`: path to where output folder should be created
      - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
@@ -108,15 +108,18 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
 
 ### Create dataset split(s)
 
-1. `make_datasplit_json.py`: sets up json dictionary based on an excel file
+1. `make_datasplit_json.py`: sets up json dictionary based on an excel file (currently only working for cross-validation)
    - **Input**:
-     - `--output-path`: where the json files should be saved to
-     - `--excel-path`: path to the excel with the data
-     - `--sheet-name`: (optional) name of the excel sheet that contains the data
-     - `--endpoints`: name(s) of the column that should be used as an end-point --> comma separated if multiple
-     - `--json-path`: (optional) json file that should be extended
+    - `--output-path`: where the json files should be saved to
+    - `--excel-path`: path to the excel with the data
+    - `--endpoint-name`: default is 'Need resection?'. Name of the column that should be used as an end-point
+    - `--sheet-name`: (optional) name of the excel sheet that contains the data
+    - `--json-path`: (optional) json file that should be extended
+    - `--cross-val`: (option) how many cross validation splits should be made (default is 1)
+    - `--seed`: (option) set a seed (default is 42)
+    - `--multiple_hotspots`: (optional) set number, if multiple hotspots are present per slide
     
-    Excel is expected to have the following columns:
+Excel is expected to have the following columns:
     - 'CD8 filename': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
     - 'CD8 folder: folder where the slide is saved
     - 'CD8 ID': first part of the filename (e.g patient1)
@@ -139,7 +142,16 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
             endpoint value: [Filename-ID, ...]
             ...   
         ```
-
+       or if with cross-validation
+       ```
+        0:
+            endpoint value: [Filename-ID, ...]
+            ...
+        1:
+            endpoint value: [Filename-ID, ...]
+            ...
+        ...
+        ```
 1. `split_gxl_dataset.py`: Splits an existing folder of gxl files into the train/val/test according to a provided
    JSON file.
     - **Input**:
@@ -148,35 +160,38 @@ an ASAP xml file (expects the following annotations groups: `lymphocytes`, `tumo
         - `--output-path`: (optional) where the gxl files should be saved to. If not set, the input folder will be
           re-organized
           
-        The json file needs to be in the following structure:
+      The json file needs to be in the following structure. Subset can e.g. be train/test/val or 0/1/2/4 for a 
+      cross-validation setup
         ```
-        train:
+        subset1:
             endpoint value: [Filename-ID, ...]
             ...
-        val:
+        subset2:
             endpoint value: [Filename-ID, ...]
             ...
-        test:
+        subset3:
             endpoint value: [Filename-ID, ...]
-            ...   
+            ...  
+        ... 
         ```
     - **Output**: Folder structure with data split like this:
         ```
-        train:
+        subset1:
             class1
                 file1.gxl
                 ...
             ...
-        val:
+        subset2:
             class1
                 file1.gxl
                 ...
             ...
-        test:
+        subset3:
             class1
                 file1.gxl
                 ...
             ...
+        ...
         ```    
 
 1. `endpoints_json_to_cxl.py`: splits the data from the json file into train, vaild and test cxl files. 

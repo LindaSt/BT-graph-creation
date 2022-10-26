@@ -44,7 +44,7 @@ class SplitJson:
         excel_path, sheet_name = path_sheet
         df = pd.read_excel(excel_path, sheet_name=sheet_name, engine='openpyxl')
 
-        df.drop(df[df.Excluded == True].index, inplace=True)
+        df.drop(df[df.Excluded==True].index, inplace=True)
         df.drop(df[df['Exclude for BTS'] == 'x'].index, inplace=True)
         df.drop(df[df['CD8 ID'] == 'na'].index, inplace=True)
 

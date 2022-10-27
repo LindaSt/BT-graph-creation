@@ -102,7 +102,8 @@ def check_output(txt_output, xml_output, all_hotspots):
         text_file.write("\n".join([stats, missing_txt_msg, missing_xml_msg]))
 
 
-def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, all_hotspots, overwrite=False):
+def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, all_hotspots, overwrite=False,
+                                  no_xml=False):
     output_text_files = []
     error_files = []
     for file in txt_files_to_process:
@@ -139,7 +140,8 @@ def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, 
                 print(f'No hotspot xml for file {os.path.basename(file)}')
                 error_files.append(file)
 
-    create_asap_xml(txt_output, xml_output)
+    if not no_xml:
+        create_asap_xml(txt_output, xml_output)
 
     # make sure all the hotspots were processed and that there are three txt files for each hotspot
     check_output(txt_output, xml_output, all_hotspots.keys())
@@ -155,6 +157,8 @@ if __name__ == '__main__':
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
     parser.add_argument("--overwrite", type=bool, required=False, default=False)
+    parser.add_argument("--no-xml", type=bool, required=False, default=False)
+
     args = parser.parse_args()
 
     hotspot_path = args.xml_hotspot_folder
@@ -179,4 +183,4 @@ if __name__ == '__main__':
 
     txt_files_to_process = [f for name, f in txt_files_to_process.items() if name in matched]
     # create the hotspot asap and txt files
-    create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, hotspots, args.overwrite)
+    create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, hotspots, args.overwrite, args.no_xml)

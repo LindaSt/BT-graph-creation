@@ -110,7 +110,7 @@ class XmlFile:
             e = xml_tree.write(output_file, pretty_print=True)
 
 
-def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, staining_id: str = 'CD8',
+def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, separator_id: str = '_coord',
                     full: bool = False):
     # create output folder if it does not exist
     output_base_path = output_folder
@@ -120,7 +120,7 @@ def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, stain
     # get a list of all the txt files to process
     input_path = os.path.join(coordinates_txt_files_folder, r'*_coordinates_*.txt')
     all_files = glob.glob(input_path)
-    files_to_process = list(set([re.search(repr(f'(.*{staining_id})')[1:-1], f).group(1) for f in all_files]))
+    files_to_process = list(set([re.search(repr(f'(.*){separator_id}')[1:-1], f).group(1) for f in all_files]))
 
     for file in files_to_process:
         XmlFile(file=file, output_path=output_base_path, full=full).save_xml()

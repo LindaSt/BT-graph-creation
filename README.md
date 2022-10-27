@@ -50,7 +50,23 @@ Finally, the graph representations are saved in gxl format.
      - `--xml-hotspot-folder`: folder with the xml files of the hotspots
      - `--coordinate-txt-files-folder`: folder with the text files of the coordinates of the lymphocytes and tumor buds
      - `--output-folder`: folder where the output is saved to
-     - `--overwrite`: optional. Overrides existing files (default is False) 
+     - `--overwrite`: optional. Overrides existing files (default is False)
+     - `--no-xml`: optional. Default is False. Set if no xml files in ASAP format should be outputted  
+   - **Output**: Contains only the detected elements within the selection.
+     - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
+       for the tumor buds)
+     - Folder with xml files: one per WSI, can be loaded in ASAP. Useful for quality control and manual correction of the
+       annotations.
+       
+1. `reduce_coord_to_core.py`: retrieves only the elements within a certain area. It expects the hotspot files to have 
+   the same name as the matching coordinate files (run `check_hotspot_xml.py` first)
+   - **Input**:
+     - `--tma-coord-folder`: folder with the csv files that contain the following columns:
+       "Core Unique ID", "Centroid X (pixels)", "Centroid Y (pixels)", and "Radius (pixels)".
+     - `--coordinate-txt-files-folder`: folder with the text files of the coordinates of the lymphocytes and tumor buds
+     - `--output-folder`: folder where the output is saved to
+     - `--overwrite`: optional. Overrides existing files (default is False)
+     - `--no-xml`: optional. Default is False. Set if no xml files in ASAP format should be outputted 
    - **Output**: Contains only the detected elements within the selection.
      - Folder with coordinate text files: three files per WSI (one for the hotspots, one for the lymphocytes, one
        for the tumor buds)

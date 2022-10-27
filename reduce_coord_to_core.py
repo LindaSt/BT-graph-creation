@@ -1,14 +1,11 @@
 import glob
 import os
 import numpy as np
-from lxml import etree as ET
 import argparse
 import re
-import shutil
 import pandas as pd
 
 from coord_to_xml import create_asap_xml
-from xml_to_txt_file import process_xml_files
 
 
 def setup_output_folders(output_path):
@@ -26,9 +23,11 @@ def setup_output_folders(output_path):
     return xml_output, txt_output
 
 
-def in_circle(center_x, center_y, radius, x, y):
-    square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
-    return square_dist <= radius ** 2
+def in_circle(center_x, center_y, radius, coord):
+    mask = [((center_x - row[0]) ** 2 + (center_y - row[1]) ** 2) <= radius ** 2 for row in coord]
+    # square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
+    # square_dist <= radius ** 2?
+    return coord[mask]
 
 
 def parse_tma_coord_csv(coord_csvs):
@@ -37,7 +36,7 @@ def parse_tma_coord_csv(coord_csvs):
         if os.path.isfile(file_path):
             df = pd.read_csv(file_path, sep=";")
             df.dropna(subset=['Core Unique ID'], inplace=True)
-            df.insert(0, 'TMA_filename', re.search(r'Coordinates_(.*).csv', file_path).group(1))
+            df.insert(0, 'TMA_filename', re.search(r"Coordinates_(.*).csv", file_path).group(1))
             df['Core Unique ID'] = df['Core Unique ID'].astype(int)
             all_core_coord.append(df)
         else:
@@ -47,25 +46,33 @@ def parse_tma_coord_csv(coord_csvs):
     return all_core_coord
 
 
-def create_hotspot_only_txt_files(txt_files_to_process, xml_output, txt_output, all_cores, overwrite=False):
-    output_text_files = []
+def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all_cores, overwrite=False,
+                               no_xml=False):
     error_files = []
-    for file in txt_files_to_process:
-        print('Processing file {}'.format(os.path.basename(file)))
-        if os.path.isfile(file):
-            # load the file
-            coords = np.loadtxt(file)
-            #
-            output_txt_file = ""
-            # if not os.path.isfile(output_txt_file) or overwrite:
-            #     np.savetxt(output_txt_file, to_save, fmt='%.4f')
-            else:
-                print('The coordinates file {} already exists'.format(output_txt_file))
-        else:
-            print('File {} does not exist. Continuing...'.format(file_path))
-            error_files.append(file_path)
+    for file_id, file_path in txt_files_to_process.items():
+        print(f'Processing {file_path}.')
+        cores_df = all_cores[all_cores['TMA_filename'] == file_id]
 
-    create_asap_xml(txt_output, xml_output)
+        for label in ['lymphocytes', 'tumorbuds']:
+            # load the file
+            if os.path.isfile(f'{file_path}_coordinates_{label}.txt'):
+                coord = np.loadtxt(f'{file_path}_coordinates_{label}.txt')
+                coord_cores = cores_df.apply(
+                    lambda row: in_circle(row['Centroid X (pixels)'], row['Centroid Y (pixels)'],
+                                          row['Radius (pixels)'], coord), axis=1)
+                coord_cores = {core_id: c for core_id, c in zip(cores_df['Core Unique ID'], coord_cores)}
+                for core_id, coords in coord_cores.items():
+                    output_txt_file = os.path.join(txt_output, f'{file_id}_{core_id}_coordinates_{label}.txt')
+                    if not os.path.isfile(output_txt_file) or overwrite:
+                        np.savetxt(output_txt_file, coords, fmt='%.4f')
+                    else:
+                        print(f'The coordinates {output_txt_file} already exists.')
+            else:
+                print(f'{file_path}_coordinates_{label}.txt does not exists.')
+                error_files.append(f'{file_path}_coordinates_{label}.txt')
+
+    if not no_xml:
+        create_asap_xml(txt_output, xml_output, full=True)
 
 
 if __name__ == '__main__':
@@ -75,6 +82,7 @@ if __name__ == '__main__':
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
     parser.add_argument("--overwrite", type=bool, required=False, default=False)
+    parser.add_argument("--no-xml", type=bool, required=False, default=False)
     args = parser.parse_args()
 
     tma_coord_folder = args.tma_coord_folder
@@ -85,7 +93,8 @@ if __name__ == '__main__':
 
     coor_txt_files_path = os.path.join(args.coordinate_txt_files, r'*_coordinates_*.txt')
     all_txt_files = glob.glob(coor_txt_files_path)
-    txt_files_to_process = {os.path.basename(file): file for file in list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))}
+    txt_files_to_process = {os.path.basename(file): file for file in
+                            list(set([re.search(r'(.*)_coordinates', f).group(1) for f in all_txt_files]))}
 
     # get the TMA core coordinates
     file_ids = set([os.path.basename(f) for f in txt_files_to_process])
@@ -93,4 +102,4 @@ if __name__ == '__main__':
     tma_coord = parse_tma_coord_csv(tma_coord_csv_files)
 
     # create the hotspot asap and txt files
-    create_hotspot_only_txt_files(txt_files_to_process, core_output, txt_output, tma_coord, args.overwrite)
+    create_core_only_txt_files(txt_files_to_process, core_output, txt_output, tma_coord, args.overwrite, args.no_xml)

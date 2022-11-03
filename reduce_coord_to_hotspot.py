@@ -156,8 +156,8 @@ if __name__ == '__main__':
     parser.add_argument("--xml-hotspot-folder", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
-    parser.add_argument("--overwrite", type=bool, required=False, default=False)
-    parser.add_argument("--no-xml", type=bool, required=False, default=False)
+    parser.add_argument("--overwrite", action='store_true', required=False, default=False)
+    parser.add_argument("--no-xml", action='store_true', required=False, default=False)
 
     args = parser.parse_args()
 

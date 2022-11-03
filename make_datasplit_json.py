@@ -125,7 +125,7 @@ class SplitJson:
         with open(os.path.join(self.output_folder, f'{json_filename}-all.json'), 'w') as fp:
             json.dump(self.endpoints_dict, fp, indent=4, cls=NpEncoder)
 
-        with open(os.path.join(self.output_folder, f'{json_filename}-split.json'), 'w') as fp:
+        with open(os.path.join(self.output_folder, f'{json_filename}-cv{self.cross_val}.json'), 'w') as fp:
             if self.cross_val > 1:
                 json.dump(self.split_dict_cv, fp, indent=4, cls=NpEncoder)
             else:

@@ -71,6 +71,17 @@ def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all
                 print(f'{file_path}_coordinates_{label}.txt does not exists.')
                 error_files.append(f'{file_path}_coordinates_{label}.txt')
 
+        # save the square around the core
+        # TODO: there seems to be an offset in coordinates
+        for index, row in cores_df.iterrows():
+            x, y, r = row['Centroid X (pixels)'], row['Centroid Y (pixels)'], row['Radius (pixels)']
+            square_coords = np.array([x-r, y+r, x+r, y+r, x+r, y-r, x-r, y-r])
+            output_txt_file = os.path.join(txt_output, f'{file_id}_{row["Core Unique ID"]}_coordinates_hotspot.txt')
+            if not os.path.isfile(output_txt_file) or overwrite:
+                np.savetxt(output_txt_file, square_coords, fmt='%.4f')
+            else:
+                print(f'The coordinates {output_txt_file} already exists.')
+
     if not no_xml:
         create_asap_xml(txt_output, xml_output, full=True)
 
@@ -81,8 +92,8 @@ if __name__ == '__main__':
     parser.add_argument("--tma-coord-folder", type=str, required=True)
     parser.add_argument("--output-folder", type=str, required=True)
     parser.add_argument("--coordinate-txt-files", type=str, required=True)
-    parser.add_argument("--overwrite", type=bool, required=False, default=False)
-    parser.add_argument("--no-xml", type=bool, required=False, default=False)
+    parser.add_argument("--overwrite", action='store_true', required=False, default=False)
+    parser.add_argument("--no-xml", action='store_true', required=False, default=False)
     args = parser.parse_args()
 
     tma_coord_folder = args.tma_coord_folder
@@ -103,3 +114,4 @@ if __name__ == '__main__':
 
     # create the hotspot asap and txt files
     create_core_only_txt_files(txt_files_to_process, core_output, txt_output, tma_coord, args.overwrite, args.no_xml)
+

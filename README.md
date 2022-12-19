@@ -90,7 +90,8 @@ Finally, the graph representations are saved in gxl format.
        - `tumorbuds`: only the tumorbuds are fully connected
      - `--other-edge-fct`: supersedes the `--edge-def*`. Following options:
        - `hierarchical` / `hierarchical-cutoff-X`: creates a graph where the tumor buds are fully connected, and the T-cells are 
-         connected to the closest tumor bud, and then fully connected per bud. A cutoff can be specified as X (in micrometers)
+         connected to the closest tumor bud, and then fully connected per bud. A cutoff can be specified as X (in micrometers) 
+         for the connection of the T-cells 
        - `delaunay`: performs delaunay triangulation (regardless of node label)  
      - `--output-folder`: path to where output folder should be created
      - `--node-feature-csvs`: optional. Path to folder with csv files that contain additional node features.
@@ -99,6 +100,8 @@ Finally, the graph representations are saved in gxl format.
      - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image. 
      It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0 
        for the slide scanner used in this project)
+     - `overwrite`: optional. Set if you want existing gxl files to be overwritten. Default is False
+
    - **Output**: 
      - Folder with one gxl file per hotspot, which contains the graph (same structure as the gxl files 
        from the IAM Graph Databse). The x,y coordinates and edge distance labels are in mikro-meter.

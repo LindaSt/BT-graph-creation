@@ -52,6 +52,9 @@ def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all
     for file_id, file_path in txt_files_to_process.items():
         print(f'Processing {file_path}.')
         cores_df = all_cores[all_cores['TMA_filename'] == file_id]
+        # offset from QuPath border loading: x = 30, y = 30320
+        cores_df['Centroid X (pixels)'] += 30
+        cores_df['Centroid Y (pixels)'] += 30320
 
         for label in ['lymphocytes', 'tumorbuds']:
             # load the file
@@ -72,18 +75,18 @@ def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all
                 error_files.append(f'{file_path}_coordinates_{label}.txt')
 
         # save the square around the core
-        # TODO: there seems to be an offset in coordinates
         for index, row in cores_df.iterrows():
+            # x = 30, y = 30320
             x, y, r = row['Centroid X (pixels)'], row['Centroid Y (pixels)'], row['Radius (pixels)']
             square_coords = np.array([x-r, y+r, x+r, y+r, x+r, y-r, x-r, y-r])
             output_txt_file = os.path.join(txt_output, f'{file_id}_{row["Core Unique ID"]}_coordinates_hotspot.txt')
             if not os.path.isfile(output_txt_file) or overwrite:
-                np.savetxt(output_txt_file, square_coords, fmt='%.4f')
+                np.savetxt(output_txt_file, square_coords, fmt='%.4f', newline=" ")
             else:
                 print(f'The coordinates {output_txt_file} already exists.')
 
     if not no_xml:
-        create_asap_xml(txt_output, xml_output, full=True)
+        create_asap_xml(txt_output, xml_output)
 
 
 if __name__ == '__main__':

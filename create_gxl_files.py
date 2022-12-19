@@ -173,7 +173,7 @@ class Graph:
 
     def _convert_coord(self, coordinates):
         assert len(coordinates) == 2
-        # adjust x and y to make relative to the hot-spot coordinates.
+        # adjust x and y to make relative to the hotspot coordinates.
         coord = np.array([coordinates[0] - min(self.hotspot_coordinates[:, 0]),
                           coordinates[1] - min(self.hotspot_coordinates[:, 1])])
         assert min(coord) >= 0
@@ -507,6 +507,7 @@ class GxlFilesCreator:
 
     def check_files(self):
         # remove files that don't have a matching spacing and csv entry from self.files_to_process, and vice versa
+        # TODO: return list of missing files
         file_ids_process = [os.path.basename(f).split('_asap')[0] for f in self.files_to_process]
         if self.matched_csv is not None:
             common_ids = self._match_and_diff(set(self.matched_csv.keys()), set(file_ids_process))
@@ -541,10 +542,8 @@ class GxlFilesCreator:
             else:
                 return Graph(file_id=file_id, file_path=file_path, edge_config=self.edge_config)
 
-    def save_gxls(self, output_folder: str):
+    def save_gxls(self, output_path: str):
         # create output folder if it does not exist
-        subfolder = str(self.edge_config) if self.edge_config else 'no_edges'
-        output_path = os.path.join(output_folder, subfolder)
         if not os.path.isdir(output_path):
             os.makedirs(output_path)
         if self.datasplit_dict is not None:
@@ -580,19 +579,19 @@ class GxlFilesCreator:
             with open(os.path.join(outfolder, file_id + '.gxl'), 'wb') as f:
                 f.write(ET.tostring(xml_tree, pretty_print=True))
 
-        self._save_log(output_path, subfolder)
+        self._save_log(output_path)
 
-    def _save_log(self, output_folder: str, subfolder: str):
+    def _save_log(self, output_folder):
         # Save the files where we had a missing spacing, xml or csv file (if present)
         if len(self.invalid_files) > 0:
-            with open(os.path.join(output_folder, f'{subfolder}_invalid_file_ids.txt'), 'w') as f:
+            with open(os.path.join(output_folder, f'{os.path.basename(output_folder)}_invalid_file_ids.txt'), 'w') as f:
                 f.write('\n'.join(sorted(self.invalid_files)))
 
 
 def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb_to_l: str = None,
                      edge_def_tb_to_tb: str = None, edge_def_l_to_tb: str = None, fully_connected: str = None,
                      spacing_json: str = None, node_feature_csvs: str = None, split_json: str = None,
-                     other_edge_fct: str = None):
+                     other_edge_fct: str = None, overwrite: bool = False):
     """
     INPUT
      - `--asap_xml_files_folder`: path to the folder with the coordinates xml files
@@ -619,15 +618,18 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
      - `--spacing-json`: optional. Path to json file that contains the spacing for each whole slide image.
      It is needed to compute the distance between elements. (default is 0.242797397769517, which corresponds to level 0
        for the slide scanner used in this project)
-       
+     - `overwrite`: optional. Set if you want existing gxl files to be overwritten. Default is False
+
     OUTPUT
     One gxl file per hotspot, which contains the graph (same structure as the gxl files from the IAM Graph Databse)
-    TODO: remove this: The distances are centered (xy - xy(average)).?
     """
     # get the edge definitions
     edge_def_config = EdgeConfig(edge_def_tb_to_l=edge_def_tb_to_l, edge_def_tb_to_tb=edge_def_tb_to_tb,
                                  edge_def_l_to_tb=edge_def_l_to_tb, fully_connected=fully_connected,
                                  other=other_edge_fct)
+
+    subfolder = str(edge_def_config) if edge_def_config else 'no_edges'
+    output_path = os.path.join(output_folder, subfolder)
 
     # read the spacing json
     if spacing_json:
@@ -662,10 +664,18 @@ def make_gxl_dataset(asap_xml_files_folder: str, output_folder: str, edge_def_tb
             print(f'Folder {node_feature_csvs} with node feature csv does not exist. Exiting.')
             sys.exit(-1)
 
+    # get list of existing files
+    if overwrite:
+        print('Existing files will be overwritten!')
+    else:
+        existing_gxl = [os.path.basename(i).rsplit('.', 1)[0] for i in glob.glob(os.path.join(output_path, '*.gxl'))]
+        files_to_process_id = [os.path.basename(i).rsplit('_', 1)[0] for i in files_to_process]
+        files_to_process = [file_path for file_id, file_path in zip(files_to_process_id, files_to_process) if file_id not in existing_gxl]
+
     # Create the gxl files
     GxlFilesCreator(files_to_process=files_to_process, spacings=spacings, edge_config=edge_def_config,
                     node_feature_csvs=node_feature_csvs, datasplit_dict=datasplit_dict).save_gxls(
-        output_folder=output_folder)
+        output_path=output_path)
 
 
 if __name__ == '__main__':

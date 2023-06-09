@@ -9,13 +9,14 @@ import fire
 
 
 # export PYTHONPATH="${PYTHONPATH}:/opt/ASAP/bin"
-
+# import sys
+# sys.path.append(r"C:\Program Files\ASAP 2.0\bin")
 
 class CoordinatesFromTiffExtractor:
     def __init__(self, tif_files_folder: str, output_folder: str, window_size: int = 1024,
                  spacing_json_filepath: str = None, lymph_only: bool = False, buds_only: bool = False,
                  overwrite: bool = False,
-                 multi_thread: bool = True, n_threads: int = 4):
+                 multi_thread: bool = True, n_threads: int = 8):
 
         self.lymph_only = lymph_only
         self.buds_only = buds_only
@@ -25,6 +26,7 @@ class CoordinatesFromTiffExtractor:
         self.n_threads = n_threads
         # get a list of all the tif files to process
         self.files_to_process = glob.glob(os.path.join(tif_files_folder, r'*.tif'))
+        #
 
         # set the indices for the bud and lymphocyte annotations
         # bud output: 0 for background, 1 for foreground, >1 for buds (mostly 2, but overlaps can create 3 or more)

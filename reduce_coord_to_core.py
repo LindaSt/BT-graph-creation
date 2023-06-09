@@ -53,8 +53,12 @@ def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all
         print(f'Processing {file_path}.')
         cores_df = all_cores[all_cores['TMA_filename'] == file_id]
         # offset from QuPath border loading: x = 30, y = 30320
-        cores_df['Centroid X (pixels)'] += 30
-        cores_df['Centroid Y (pixels)'] += 30320
+        # cores_df['Centroid X (pixels)'] += 30
+        # cores_df['Centroid Y (pixels)'] += 30320
+        # TODO: fix the offset
+        # x, y = wsi_img.properties[openslide.PROPERTY_NAME_BOUNDS_X], wsi_img.properties[
+        #     openslide.PROPERTY_NAME_BOUNDS_Y]
+        # coords = self.parse_csv(coord_path, adjust_x=int(x), adjust_y=int(y))
 
         for label in ['lymphocytes', 'tumorbuds']:
             # load the file

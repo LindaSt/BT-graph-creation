@@ -47,7 +47,7 @@ def parse_tma_coord_csv(coord_csvs):
 
 
 def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all_cores, overwrite=False,
-                               no_xml=False):
+                               no_xml=False, shift_df: list = None):
     error_files = []
     for file_id, file_path in txt_files_to_process.items():
         print(f'Processing {file_path}.')
@@ -55,10 +55,10 @@ def create_core_only_txt_files(txt_files_to_process, xml_output, txt_output, all
         # offset from QuPath border loading: x = 30, y = 30320
         # cores_df['Centroid X (pixels)'] += 30
         # cores_df['Centroid Y (pixels)'] += 30320
-        # TODO: fix the offset
-        # x, y = wsi_img.properties[openslide.PROPERTY_NAME_BOUNDS_X], wsi_img.properties[
-        #     openslide.PROPERTY_NAME_BOUNDS_Y]
-        # coords = self.parse_csv(coord_path, adjust_x=int(x), adjust_y=int(y))
+        if shift_df is not None:
+            shift = shift_df[shift_df['TMA name'] == f'{file_id}.mrxs'].iloc[0, 1:3]
+            cores_df['Centroid X (pixels)'] += shift['x']
+            cores_df['Centroid Y (pixels)'] += shift['y']
 
         for label in ['lymphocytes', 'tumorbuds']:
             # load the file
@@ -119,6 +119,11 @@ if __name__ == '__main__':
     tma_coord_csv_files = glob.glob(os.path.join(tma_coord_folder, '*.csv'))
     tma_coord = parse_tma_coord_csv(tma_coord_csv_files)
 
+    # load excel with shifts
+    shift_df = pd.read_excel(r'C:\Users\ls19k424\Nextcloud\PhD\Projects\Rising Tide\data stage II\patient data\stageII_masterfile.xlsx',
+                             sheet_name="shifts")
+
     # create the hotspot asap and txt files
-    create_core_only_txt_files(txt_files_to_process, core_output, txt_output, tma_coord, args.overwrite, args.no_xml)
+    create_core_only_txt_files(txt_files_to_process, core_output, txt_output, tma_coord, args.overwrite, args.no_xml,
+                               shift_df)
 

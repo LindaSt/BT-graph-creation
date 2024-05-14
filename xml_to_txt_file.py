@@ -3,7 +3,7 @@ import os
 import numpy as np
 import xml.etree.ElementTree as ET
 import argparse
-from util.file_parsing import parse_xml
+from util.xml_parsing import parse_xml
 
 
 def process_xml_files(files_to_process, output_path):

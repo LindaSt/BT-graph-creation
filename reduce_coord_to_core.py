@@ -24,6 +24,7 @@ def setup_output_folders(output_path):
 
 
 def in_circle(center_x, center_y, radius, coord):
+    coord = np.array(coord)
     mask = [((center_x - row[0]) ** 2 + (center_y - row[1]) ** 2) <= radius ** 2 for row in coord]
     # square_dist = (center_x - x) ** 2 + (center_y - y) ** 2
     # square_dist <= radius ** 2?

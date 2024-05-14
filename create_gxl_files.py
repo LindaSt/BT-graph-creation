@@ -11,7 +11,7 @@ import json
 from scipy.spatial import distance, Delaunay
 from sklearn.neighbors import NearestNeighbors
 
-from util.file_parsing import parse_xml
+from util.xml_parsing import parse_xml
 
 
 class EdgeConfig:

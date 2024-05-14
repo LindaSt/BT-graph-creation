@@ -5,6 +5,7 @@ from lxml import etree as ET
 import re
 import fire
 
+from util.xml_parsing import create_xml_tree
 
 class XmlFile:
     def __init__(self, file: str, output_path: str, full: bool = False):
@@ -60,55 +61,16 @@ class XmlFile:
         xmls = {}
         for coord_dict in self.data:
             out_file = coord_dict.pop('output_file')
-            xml_tree = ET.Element('ASAP_Annotations')
-            # Make the annotations and coordinates
-            xml_annotations = ET.SubElement(xml_tree, 'Annotations')
-            # Make the groups
-            xml_annotation_groups = ET.SubElement(xml_tree, 'AnnotationGroups')
-
-            for group, coordinates in coord_dict.items():
-                # check if file is not empty
-                if coordinates is not None and len(coordinates) > 0:
-                    # make the group
-                    xml_group = ET.SubElement(xml_annotation_groups, 'Group',
-                                              attrib={'Name': group, 'PartOfGroup': 'None',
-                                                      'Color': self.colors[group]})
-                    xml_group_attrib = ET.SubElement(xml_group, 'Attributes')
-
-                    # Make the annotations and coordinates
-                    if len(coordinates.shape) == 1:
-                        coordinates = np.reshape(coordinates, (1, coordinates.shape[0]))
-                    if coordinates.shape[1] == 2:
-                        annotation_type = 'Dot'
-                    else:
-                        annotation_type = 'Rectangle'
-                    # iterate over the list
-                    for i, line in enumerate(coordinates):
-                        attrib = {'Name': 'Annotation {}'.format(i), 'PartOfGroup': group,
-                                  'Color': self.colors[group],
-                                  'Type': annotation_type}
-                        if annotation_type == 'Dot':
-                            xml_annotation = ET.SubElement(xml_annotations, 'Annotation', attrib)
-                            xml_coordinates = ET.SubElement(xml_annotation, 'Coordinates')
-                            coor_attrib = {'Order': '0', 'X': str(line[0]), 'Y': str(line[1])}
-                            xml_coordinate = ET.SubElement(xml_coordinates, 'Coordinate', attrib=coor_attrib)
-                        else:
-                            xml_annotation = ET.SubElement(xml_annotations, 'Annotation', attrib)
-                            xml_coordinates = ET.SubElement(xml_annotation, 'Coordinates')
-                            coor = [(line[i], line[i + 1]) for i in range(0, len(line), 2)]
-                            for j, tup in enumerate(coor):
-                                coor_attrib = {'Order': str(j), 'X': str(tup[0]), 'Y': str(tup[1])}
-                                xml_coordinate = ET.SubElement(xml_coordinates, 'Coordinate', attrib=coor_attrib)
-            xmls[out_file] = ET.ElementTree(xml_tree)
+            xmls[out_file] = create_xml_tree(coord_dict, self.colors)
         return xmls
 
     def save_xml(self):
         if self.xmls is None:
             return
-        for output_file, xml_tree in self.xmls.items():
+        for output_file, xml_string in self.xmls.items():
+            with open(output_file, 'w') as f:
+                f.write(xml_string)
             # e = ET.dump(xml_tree)
-            e = xml_tree.write(output_file, pretty_print=True)
-
 
 def create_asap_xml(coordinates_txt_files_folder: str, output_folder: str, separator_id: str = '_coord',
                     full: bool = False):

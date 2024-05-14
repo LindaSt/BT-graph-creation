@@ -19,10 +19,14 @@ class NpEncoder(json.JSONEncoder):
 
 class SplitJson:
     def __init__(self, excel_path: str, output_folder: str, endpoint_name: str = 'Need resection?', sheet_name: str = None,
-                    json_path: str = None, seed: str = 42, split: float = 0.4, cross_val: int = 1, multiple_hotspots=None):
+                    json_path: str = None, seed: str = 42, split: float = 0.4, identifier: str = 'File-ID',
+                 cross_val: int = 1, multiple_hotspots=None, col_names: str = None):
         np.random.seed(seed)
         self.output_folder = output_folder
+        self.col_names = col_names
+        self.identifier = identifier
         self.endpoint_name = endpoint_name
+
         self.json_path = json_path
         self.input_filename = os.path.splitext(os.path.basename(excel_path))[0]
         self.split = split
@@ -34,6 +38,16 @@ class SplitJson:
 
         self.save_endpoint_jsons()
 
+    @property
+    def col_names(self) -> list:
+        return self._col_names
+
+    @col_names.setter
+    def col_names(self, col_names: str):
+        if col_names is None:
+            self._col_names = None
+        else:
+            self._col_names = ','.split(col_names)
 
     @property
     def endpoints_df(self):
@@ -43,12 +57,10 @@ class SplitJson:
     def endpoints_df(self, path_sheet):
         excel_path, sheet_name = path_sheet
         df = pd.read_excel(excel_path, sheet_name=sheet_name, engine='openpyxl')
-
-        df.drop(df[df.Excluded==True].index, inplace=True)
-        df.drop(df[df['Exclude for BTS'] == 'x'].index, inplace=True)
-        df.drop(df[df['CD8 ID'] == 'na'].index, inplace=True)
-
-        df.set_index('CD8 filename', inplace=True)
+        # drop non-blank rows in column that includes "Excluded" in name
+        if len([col for col in df.columns if 'Excluded' in col]) > 0:
+            df.drop(df[df[[col for col in df.columns if 'Excluded' in col]].isnull().all(axis=1)].index, inplace=True)
+        df.set_index(self.identifier, inplace=True)
         self._endpoints = df
 
     @property
@@ -60,16 +72,20 @@ class SplitJson:
                 endpoints_dict = json.load(json_file)
         else:
             endpoints_dict = {}
-        for filename in self.endpoints_df.index:
-            patient_id = self.endpoints_df.at[filename, 'CD8 ID']
-            patient_nr = self.endpoints_df.at[filename, 'Patient-Nr']
-            d = {self.endpoint_name: int(self.endpoints_df.at[filename, self.endpoint_name]),
-                 'CD8 folder': self.endpoints_df.at[filename, 'CD8 folder'],
-                 'patient-nr': patient_nr}
-            if patient_id in endpoints_dict:
-                endpoints_dict[str(patient_id)].update({filename: d})
+        for id_value in self.endpoints_df.index:
+            file_id = self.endpoints_df.at[id_value, "Filename"]
+            patient_nr = str(self.endpoints_df.at[id_value, 'Patient-Nr'])
+            d = {self.endpoint_name: int(self.endpoints_df.at[id_value, self.endpoint_name]),
+                 'file-ID': file_id}
+            # if there is a column 'Folder' in the Excel file, add it to the dictionary
+            if self.col_names is not None:
+                for col in self.col_names:
+                    if col in self.endpoints_df.columns:
+                        d[col] = self.endpoints_df.at[id_value, col]
+            if patient_nr in endpoints_dict:
+                endpoints_dict[str(patient_nr)].update({id_value: d})
             else:
-                endpoints_dict[str(patient_id)] = {filename: d}
+                endpoints_dict[str(patient_nr)] = {id_value: d}
 
         if self.multiple_hotspots is None:
             return endpoints_dict
@@ -90,7 +106,7 @@ class SplitJson:
         # get the data set splits, equal distribution per class and separated by patient
         # split is either per patient or we only have one entry per patient
         pid = np.array(self.endpoints_df['Patient-Nr'])
-        X = np.array(self.endpoints_df.index)
+        X = np.array(self.endpoints_df['Filename'])
         y = np.array(self.endpoints_df[self.endpoint_name], dtype=int)
         split_dict = {int(i): {} for i in range(self.cross_val)}
 
@@ -140,25 +156,26 @@ if __name__ == '__main__':
     --excel-path: path to the excel with the data
     --sheet-name: (optional) name of the excel sheet that contains the data
     --endpoint-name: name of the column that should be used as an end-point
+    --identifier: name of the column that should be used as an identifier
+    --col-names: (optional) names of the columns in the excel file to also be added to the json (passed with commas)
     --json-path: (optional) json file that should be extended
     --cross-val: (option) how many cross validation splits should be made (default is 1)
     --seed: (option) set a seed (default is 42)
     --multiple_hotspots: (optional) set number, if multiple hotspots are present per slide
     
     Excel is expected to have the following columns:
-    - 'CD8 filename': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
-    - 'CD8 folder: folder where the slide is saved
-    - 'CD8 ID': first part of the filename (e.g patient1)
+    - 'Filename ID': name of the slide file (e.g. patient1_I_AE1_AE3_CD8)
     - 'Patient-Nr': anonymized patient number
     - A column named after the --endpoint argument, e.g.
         'Need resection?'
            0 : No (0 in TNM stage / follow up (>= 2 years), no recurrence)
            1 : True (1 in TNM stage / follow up (>= 2 years) with recurrence)
+    - A column named after the --identifier argument, e.g. 'Filename-ID'
            
     OUTPUT:
     json file with all files with structure
         Filename-ID:
-            CD8 filename:
+            Filename:
                 folder: CD8 Folder
                 patient-nr: Patient-Nr
                 endpoint: endpoint value
